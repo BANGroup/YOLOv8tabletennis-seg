@@ -1,0 +1,130 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.log
+*.pot
+*.pyc
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# YOLOv8 / Ultralytics
+runs/
+*.pt
+*.pth
+*.onnx
+*.engine
+*.weights
+yolo*.pt
+best.pt
+last.pt
+
+# Датасеты
+dataset/
+dataset_backup/
+data/
+datasets/
+*.cache
+
+# Результаты трекинга
+tracking_results/
+ball_tracking_results/
+advanced_tracking_results/
+demo_tracking_results/
+enhanced_tracking_results/
+professional_tracking_results/
+smart_tracking_results/
+segmentation_results/
+test_results/
+
+# Извлечённые кадры
+extracted_frames/
+extracted_frames_*/
+frames/
+
+# Результаты анализа (JSON)
+*.json
+!data.yaml
+!dataset/data.yaml
+
+# Видео файлы
+*.mp4
+*.MP4
+*.avi
+*.mov
+*.mkv
+*.webm
+*.flv
+
+# Изображения (кроме тех что в репозитории для демо)
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+!assets/*.jpg
+!assets/*.png
+!docs/*.jpg
+!docs/*.png
+
+# Аудио
+*.mp3
+*.wav
+*.flac
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# Системные файлы
+Thumbs.db
+desktop.ini
+
+# Логи
+logs/
+*.log
+
+# Временные файлы
+tmp/
+temp/
+*.tmp
+
+# Модели и веса
+models/*.pt
+!models/.gitkeep
+
+# Templates результатов
+templates/
+

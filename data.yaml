@@ -1,0 +1,7 @@
+path: D:/AI/YOLOv8tabletennis-seg/dataset
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 5
+names: ['Ball', 'Net', 'Player1', 'Player2', 'Table']
