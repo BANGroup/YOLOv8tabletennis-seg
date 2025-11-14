@@ -1,0 +1,12 @@
+{
+  "total_detections": 70,
+  "missed_frames": 0,
+  "smart_impacts": 0,
+  "impacts_details": [],
+  "parameters": {
+    "max_direction_change": 180,
+    "min_rally_duration": 0.3,
+    "min_velocity": 2.0,
+    "min_consecutive_detections": 3
+  }
+}

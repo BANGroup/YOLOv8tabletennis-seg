@@ -1,0 +1,30 @@
+{
+  "total_detections": 70,
+  "missed_frames": 0,
+  "table_impacts": 2,
+  "kalman_predictions": 50,
+  "impacts_details": [
+    {
+      "frame": 27,
+      "position": [
+        176.3793182373047,
+        897.4141845703125
+      ],
+      "angle": 130.32568232518364,
+      "speed_before": 96.69044805691522,
+      "speed_after": 145.91450604172027,
+      "speed_diff": 49.22405798480506
+    },
+    {
+      "frame": 65,
+      "position": [
+        46.83371353149414,
+        784.8854370117188
+      ],
+      "angle": 141.00391606980878,
+      "speed_before": 90.28593703182781,
+      "speed_after": 85.10768215621208,
+      "speed_diff": 5.178254875615735
+    }
+  ]
+}

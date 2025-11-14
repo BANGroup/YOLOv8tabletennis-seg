@@ -1,0 +1,142 @@
+[
+  {
+    "state": "Начало записи",
+    "conditions": {
+      "bounce_S": 0,
+      "net_touch": 0,
+      "bounce_R": 0,
+      "timeout": null
+    },
+    "actions": {
+      "score_S": 0,
+      "score_R": 0
+    },
+    "comment": "Ждем «Начало розыгрыша мяча»"
+  },
+  {
+    "state": "Начало розыгрыша мяча",
+    "conditions": {
+      "bounce_S": 1,
+      "net_touch": 1,
+      "bounce_R": 1,
+      "timeout": "any"
+    },
+    "actions": {
+      "score_S": 0,
+      "score_R": 0
+    },
+    "comment": "Повтор розыгрыша"
+  },
+  {
+    "state": "Начало розыгрыша мяча",
+    "conditions": {
+      "bounce_S": 1,
+      "net_touch": 1,
+      "bounce_R": 0,
+      "timeout": "1"
+    },
+    "actions": {
+      "score_S": 0,
+      "score_R": 1
+    },
+    "comment": "Конец розыгрыша"
+  },
+  {
+    "state": "Начало розыгрыша мяча",
+    "conditions": {
+      "bounce_S": 1,
+      "net_touch": 0,
+      "bounce_R": 1,
+      "timeout": null
+    },
+    "actions": {
+      "score_S": 0,
+      "score_R": 0
+    },
+    "comment": "Продолжение розыгрыша"
+  },
+  {
+    "state": "Начало розыгрыша мяча",
+    "conditions": {
+      "bounce_S": 1,
+      "net_touch": 0,
+      "bounce_R": 1,
+      "timeout": "1"
+    },
+    "actions": {
+      "score_S": 1,
+      "score_R": 0
+    },
+    "comment": "Конец розыгрыша"
+  },
+  {
+    "state": "Начало розыгрыша мяча",
+    "conditions": {
+      "bounce_S": 1,
+      "net_touch": 0,
+      "bounce_R": 0,
+      "timeout": "1"
+    },
+    "actions": {
+      "score_S": 0,
+      "score_R": 1
+    },
+    "comment": "Конец розыгрыша"
+  },
+  {
+    "state": "Продолжение розыгрыша",
+    "conditions": {
+      "bounce_S": 1,
+      "net_touch": "any",
+      "bounce_R": "any",
+      "timeout": "any"
+    },
+    "actions": {
+      "score_S": 1,
+      "score_R": 0
+    },
+    "comment": "Конец розыгрыша"
+  },
+  {
+    "state": "Продолжение розыгрыша",
+    "conditions": {
+      "bounce_S": 0,
+      "net_touch": "any",
+      "bounce_R": 1,
+      "timeout": "1"
+    },
+    "actions": {
+      "score_S": 1,
+      "score_R": 0
+    },
+    "comment": "Конец розыгрыша"
+  },
+  {
+    "state": "Продолжение розыгрыша",
+    "conditions": {
+      "bounce_S": 0,
+      "net_touch": "any",
+      "bounce_R": 1,
+      "timeout": null
+    },
+    "actions": {
+      "score_S": 0,
+      "score_R": 0
+    },
+    "comment": "Продолжение розыгрыша"
+  },
+  {
+    "state": "Продолжение розыгрыша",
+    "conditions": {
+      "bounce_S": 0,
+      "net_touch": "any",
+      "bounce_R": 0,
+      "timeout": "1"
+    },
+    "actions": {
+      "score_S": 0,
+      "score_R": 1
+    },
+    "comment": "Конец розыгрыша"
+  }
+]

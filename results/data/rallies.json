@@ -1,0 +1,62 @@
+[
+  {
+    "rally_number": 3,
+    "start_frame": 39225,
+    "end_frame": 39271,
+    "duration_frames": 46,
+    "start_time": 654.4044044044044,
+    "end_time": 655.1718385051719,
+    "duration_seconds": 0.7674341007674457,
+    "trajectory_points": 30
+  },
+  {
+    "rally_number": 4,
+    "start_frame": 39272,
+    "end_frame": 39288,
+    "duration_frames": 16,
+    "start_time": 655.1885218551886,
+    "end_time": 655.4554554554555,
+    "duration_seconds": 0.26693360026695245,
+    "trajectory_points": 11
+  },
+  {
+    "rally_number": 5,
+    "start_frame": 39290,
+    "end_frame": 39319,
+    "duration_frames": 29,
+    "start_time": 655.4888221554888,
+    "end_time": 655.9726393059726,
+    "duration_seconds": 0.4838171504837874,
+    "trajectory_points": 16
+  },
+  {
+    "rally_number": 6,
+    "start_frame": 39320,
+    "end_frame": 39332,
+    "duration_frames": 12,
+    "start_time": 655.9893226559893,
+    "end_time": 656.1895228561896,
+    "duration_seconds": 0.20020020020024276,
+    "trajectory_points": 7
+  },
+  {
+    "rally_number": 7,
+    "start_frame": 39333,
+    "end_frame": 39358,
+    "duration_frames": 25,
+    "start_time": 656.2062062062063,
+    "end_time": 656.6232899566234,
+    "duration_seconds": 0.4170837504170777,
+    "trajectory_points": 17
+  },
+  {
+    "rally_number": 11,
+    "start_frame": 39437,
+    "end_frame": 39460,
+    "duration_frames": 23,
+    "start_time": 657.9412746079413,
+    "end_time": 658.324991658325,
+    "duration_seconds": 0.383717050383666,
+    "trajectory_points": 11
+  }
+]

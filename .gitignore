@@ -20,9 +20,6 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
-*.log
-*.pot
-*.pyc
 .env
 .venv
 env/
@@ -31,70 +28,9 @@ ENV/
 env.bak/
 venv.bak/
 
-# YOLOv8 / Ultralytics
-runs/
-*.pt
-*.pth
-*.onnx
-*.engine
-*.weights
-yolo*.pt
-best.pt
-last.pt
-
-# Датасеты
-dataset/
-dataset_backup/
-data/
-datasets/
-*.cache
-
-# Результаты трекинга
-tracking_results/
-ball_tracking_results/
-advanced_tracking_results/
-demo_tracking_results/
-enhanced_tracking_results/
-professional_tracking_results/
-smart_tracking_results/
-segmentation_results/
-test_results/
-
-# Извлечённые кадры
-extracted_frames/
-extracted_frames_*/
-frames/
-
-# Результаты анализа (JSON)
-*.json
-!data.yaml
-!dataset/data.yaml
-
-# Видео файлы
-*.mp4
-*.MP4
-*.avi
-*.mov
-*.mkv
-*.webm
-*.flv
-
-# Изображения (кроме тех что в репозитории для демо)
-*.jpg
-*.jpeg
-*.png
-*.gif
-*.bmp
-*.tiff
-!assets/*.jpg
-!assets/*.png
-!docs/*.jpg
-!docs/*.png
-
-# Аудио
-*.mp3
-*.wav
-*.flac
+# Кэши Python
+__pycache__/
+*.pyc
 
 # IDE
 .vscode/
@@ -121,10 +57,83 @@ tmp/
 temp/
 *.tmp
 
-# Модели и веса
-models/*.pt
-!models/.gitkeep
+# ============================================
+# СОХРАНИТЬ В GIT (модель, код, документы)
+# ============================================
 
-# Templates результатов
-templates/
+# ✅ СОХРАНИТЬ: YOLOv8 модели и веса
+# ✅ СОХРАНИТЬ: Весь код (*.py)
+# ✅ СОХРАНИТЬ: Документация (*.md)
+# ✅ СОХРАНИТЬ: Конфигурация (data.yaml, *.json для конфигов)
+# ✅ СОХРАНИТЬ: Датасеты
 
+# ============================================
+# ИГНОРИРОВАТЬ: Видео и фото (БЕЗ датасетов)
+# ============================================
+
+# Видео файлы (результаты обработки)
+results/**/*.mp4
+results/**/*.MP4
+results/**/*.avi
+results/**/*.mov
+results/**/*.mkv
+results/**/*.webm
+results/**/*.flv
+
+# Исходные видео (sources/)
+sources/
+sources/**/*.mp4
+sources/**/*.MP4
+sources/**/*.avi
+sources/**/*.mov
+
+# Фото/изображения (результаты, кроме датасетов)
+results/**/*.jpg
+results/**/*.jpeg
+results/**/*.png
+results/**/*.gif
+results/**/*.bmp
+results/**/*.tiff
+
+# Промежуточные кадры
+results/**/extracted_frames/
+results/**/extracted_frames_*/
+results/**/frames/
+
+# Аудио
+*.mp3
+*.wav
+*.flac
+
+# ============================================
+# ИСКЛЮЧЕНИЕ: Сохранить важные JSON файлы
+# ============================================
+
+# Игнорируем JSON но сохраняем конфиги и данные анализа
+*.json
+!docs/FSM_analysis/fsm_logic.json
+!results/data/*.json
+!data.yaml
+
+# ============================================
+# СОХРАНИТЬ В GIT: Датасеты (если есть)
+# ============================================
+
+# dataset/ - СОХРАНЯЕМ (содержит обучающие данные)
+# dataset_backup/ - СОХРАНЯЕМ (резервная копия)
+# НЕ ИГНОРИРУЮТСЯ - просто оставляем как есть
+
+# ============================================
+# ИСКЛЮЧЕНИЕ: Старые мусорные папки
+# ============================================
+
+# Старые экспериментальные результаты (можно удалить)
+tracking_results/
+ball_tracking_results/
+advanced_tracking_results/
+demo_tracking_results/
+enhanced_tracking_results/
+professional_tracking_results/
+smart_tracking_results/
+segmentation_results/
+test_results/
