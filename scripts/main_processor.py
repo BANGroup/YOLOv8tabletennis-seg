@@ -17,6 +17,8 @@ import time
 import math
 from collections import deque
 import json
+import argparse
+from pathlib import Path
 
 class KalmanFilter:
     def __init__(self):
@@ -57,7 +59,7 @@ class KalmanFilter:
         self.P = (np.eye(4) - K @ self.H) @ self.P
 
 class SmartImpactDetector:
-    """Умный детектор ударов об стол с параметрами из smart_tracking анализа"""
+    """Умный детектор ударов об стол с ВОГНУТОЙ траекторией"""
     
     def __init__(self, frame_height, fps=59.94):
         self.frame_height = frame_height
@@ -66,94 +68,182 @@ class SmartImpactDetector:
         
         # ПАРАМЕТРЫ ИЗ SMART_TRACKING АНАЛИЗА
         self.max_direction_change = 180  # Градусы (разрешить обратные удары)
-        self.min_rally_duration = 0.3    # Секунды (быстрые пассы)
+        self.min_rally_duration = 0.05    # Секунды (50 миллисекунд - минимум для отскока)
         self.min_velocity = 2.0          # Пиксели/кадр (фильтр шума)
         self.min_consecutive_detections = 3  # Детекции подряд
+        self.min_frame_gap = 6           # Минимальный разрыв между ударами (кадры)
+        self.table_polygon = None        # Полигон стола (в пикселях)
+        self.table_polygon_cv = None
+        
+        # ИСТОРИЯ ТРАЕКТОРИИ ДЛЯ ОБНАРУЖЕНИЯ ВОГНУТОСТИ
+        self.trajectory_history = deque(maxlen=10)  # Последние 10 нормализованных точек
+        self.pixel_history = deque(maxlen=10)       # Оригинальные пиксельные координаты
+        self.y_history = deque(maxlen=10)  # История нормализованных Y (высота над столом)
+        self.live_impacts = []  # Живые события для HUD/логов
+        self.last_impact_frame = None  # Последний подтверждённый кадр удара
         
         self.impacts = []
         self.impact_count = 0
         self.rally_start = None
         self.consecutive_detections = 0
     
-    def detect_impact(self, pos1, pos2, pos3, pos4, frame_idx):
+    def calculate_curvature(self, points):
         """
-        Обнаруживает удар об стол используя 4 последовательные точки
-        Критерии:
-        1. Точка 2 или 3 в зоне стола (низ кадра)
-        2. Вертикальная смена направления (отскок вверх)
-        3. Угол перелома >= 20° (НЕ 180°, как в старой логике)
-        4. Минимум движение (не шум)
+        Вычисляет кривизну траектории (вогнутость)
+        Возвращает ВЕЛИЧИНУ изменения направления (всегда положительная)
         """
-        if not all([pos1, pos2, pos3, pos4]):
-            return False
+        if len(points) < 3:
+            return 0.0
         
-        # Проверяем, что есть точка в зоне стола
-        in_table_zone = (pos2[1] > self.table_zone_start or pos3[1] > self.table_zone_start)
-        if not in_table_zone:
-            return False
+        # Берем начало, середину, конец
+        p1 = points[0]
+        p2 = points[len(points) // 2]
+        p3 = points[-1]
         
-        # Вектор 1: pos2 -> pos3 (приход к столу)
-        v1 = (pos3[0] - pos2[0], pos3[1] - pos2[1])
-        # Вектор 2: pos3 -> pos4 (отскок от стола)
-        v2 = (pos4[0] - pos3[0], pos4[1] - pos3[1])
+        # Вычисляем максимальное отклонение в середине от линии начало-конец
+        # Если max(y) в середине (выпуклая вверх) - это вогнутость!
+        y_min = min(p1[1], p3[1])
+        y_max = max(p1[1], p3[1])
         
-        len1 = math.sqrt(v1[0]**2 + v1[1]**2)
-        len2 = math.sqrt(v2[0]**2 + v2[1]**2)
+        # Если p2 находится ВЫШЕ обоих концов = вогнутость вверх
+        curvature = p2[1] - max(p1[1], p3[1])
         
-        # Фильтруем очень малые движения (шум)
-        if len1 < self.min_velocity or len2 < self.min_velocity:
-            return False
+        # Если p2 находится НИЖЕ обоих концов (т.е. меньше min) = вогнутость вниз
+        if p2[1] < min(p1[1], p3[1]):
+            curvature = min(p1[1], p3[1]) - p2[1]
         
-        # Нормализуем
-        v1_norm = (v1[0] / len1, v1[1] / len1)
-        v2_norm = (v2[0] / len2, v2[1] / len2)
-        
-        # КЛЮЧЕВАЯ ПРОВЕРКА: вертикальная смена направления
-        # Приход вниз (v1[1] > 0.2) + отскок вверх (v2[1] < -0.2) = удар об стол!
-        is_bounce = (v1[1] > 0.15 and v2[1] < -0.15)
-        
-        if not is_bounce:
-            return False
-        
-        # Скалярное произведение для угла
-        dot_product = v1_norm[0] * v2_norm[0] + v1_norm[1] * v2_norm[1]
-        dot_product = np.clip(dot_product, -1.0, 1.0)
-        
-        angle_rad = math.acos(dot_product)
-        angle_deg = math.degrees(angle_rad)
-        
-        # Требуем хотя бы 20° перелома (исключаем очень малые отскоки)
-        if angle_deg < 20:
-            return False
-        
-        return True
+        return abs(curvature)
     
-    def process_detection(self, position, frame_idx, fps_frame_time):
+    def detect_impact(self, position, frame_idx, pixel_position=None):
+        """
+        Обнаруживает удар об стол по ВОГНУТОЙ траектории
+        КЛЮЧЕВОЙ ПРИЗНАК: траектория вогнута вверх (вниз-вверх паттерн)
+        """
+        if not position:
+            return False
+        
+        if self.table_polygon_cv is None:
+            return False
+        
+        # Добавляем в историю
+        self.trajectory_history.append(position)
+        self.pixel_history.append(pixel_position if pixel_position is not None else position)
+        self.y_history.append(position[1])
+        
+        # Нужно минимум 5 точек для анализа
+        if len(self.trajectory_history) < 5:
+            return False
+        
+        points_list = list(self.trajectory_history)
+        first_y = points_list[0][1]
+        middle_y = points_list[len(points_list)//2][1]
+        last_y = points_list[-1][1]
+        
+        # ПРОВЕРКА 1: История показывает ЯСНЫЙ ПАТТЕРН вниз потом вверх
+        # Сравниваем позиции: начало > середина < конец (вогнутость U)
+        goes_down = (first_y < middle_y)
+        goes_up = (middle_y > last_y)
+        
+        if not (goes_down and goes_up):
+            return False
+        
+        # ПРОВЕРКА 2: Достаточное движение по Y (вниз потом вверх)
+        y_min = min(self.y_history)
+        y_max = max(self.y_history)
+        y_range = y_max - y_min
+        
+        if y_range < 15:  # Минимум 15 пикселей движения
+            return False
+        
+        # ПРОВЕРКА 3: Вогнутость траектории (вниз потом вверх)
+        curvature = self.calculate_curvature(points_list)
+        
+        # Требуем четкую вогнутость - достаточное изменение в разнице углов
+        if curvature < 10:  # Минимум 10 пикселей отклонения в середине
+            return False
+        
+        mid_idx = len(points_list) // 2
+        bounce_point = points_list[mid_idx]
+        pixel_points = list(self.pixel_history)
+        bounce_pixel = pixel_points[mid_idx] if len(pixel_points) > mid_idx else bounce_point
+        
+        if cv2.pointPolygonTest(self.table_polygon_cv, (bounce_pixel[0], bounce_pixel[1]), False) < 0:
+            return False
+        prev_point = points_list[max(0, mid_idx - 1)]
+        next_point = points_list[min(len(points_list) - 1, mid_idx + 1)]
+
+        incoming_vec = (bounce_point[0] - prev_point[0], bounce_point[1] - prev_point[1])
+        outgoing_vec = (next_point[0] - bounce_point[0], next_point[1] - bounce_point[1])
+        incoming_speed = math.sqrt(incoming_vec[0] ** 2 + incoming_vec[1] ** 2)
+        outgoing_speed = math.sqrt(outgoing_vec[0] ** 2 + outgoing_vec[1] ** 2)
+
+        # ✅ ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ - ЭТО УДАР ОБ СТОЛ!
+        return {
+            'frame': frame_idx,
+            'bounce_point': bounce_point,
+            'bounce_pixel': bounce_pixel,
+            'curvature': curvature,
+            'y_range': y_range,
+            'incoming_vector': incoming_vec,
+            'outgoing_vector': outgoing_vec,
+            'incoming_speed': incoming_speed,
+            'outgoing_speed': outgoing_speed
+        }
+    
+    def process_detection(self, position, frame_idx, fps_frame_time, impact_meta):
         """Обработка детекции с фильтром ложных срабатываний"""
         # Подсчитываем последовательные детекции
         self.consecutive_detections += 1
         
-        # Если это только первая или вторая детекция - еще не начинаем
         if self.consecutive_detections < self.min_consecutive_detections:
             return False
-        
-        # Если это ровно минимум детекций - начинаем ралли
-        if self.consecutive_detections == self.consecutive_detections:
+
+        if not self.rally_start:
             self.rally_start = (frame_idx, fps_frame_time)
-            return True
+
+        live_event = {
+            'frame': frame_idx,
+            'time': fps_frame_time,
+            'x': float(impact_meta['bounce_pixel'][0]),
+            'y': float(impact_meta['bounce_pixel'][1]),
+            'curvature': float(impact_meta['curvature']),
+            'y_range': float(impact_meta['y_range']),
+            'incoming_vector': [float(v) for v in impact_meta['incoming_vector']],
+            'outgoing_vector': [float(v) for v in impact_meta['outgoing_vector']],
+            'incoming_speed': float(impact_meta['incoming_speed']),
+            'outgoing_speed': float(impact_meta['outgoing_speed'])
+        }
         
-        return False
+        should_add_new = (
+            self.last_impact_frame is None or
+            (frame_idx - self.last_impact_frame) >= self.min_frame_gap
+        )
+        
+        if should_add_new:
+            self.live_impacts.append(live_event)
+            self.last_impact_frame = frame_idx
+        elif self.live_impacts:
+            # Обновляем последний удар более свежими координатами
+            self.live_impacts[-1].update(live_event)
+        
+        self.impact_count = len(self.live_impacts)
+        self.consecutive_detections = 0  # сбрасываем, чтобы следующий удар требовал новый паттерн
+        return should_add_new
     
     def finalize_rally(self, frame_idx, fps_frame_time):
         """Завершить ралли и проверить минимальную длительность"""
         if not self.rally_start:
             self.consecutive_detections = 0
+            # Только тут очищаем историю - когда мяч надолго потерян
+            self.trajectory_history.clear()
+            self.y_history.clear()
+            self.pixel_history.clear()
             return False
         
         start_frame, start_time = self.rally_start
         duration = fps_frame_time - start_time
         
-        # Проверяем минимальную длительность (0.3 сек)
+        # Проверяем минимальную длительность
         if duration >= self.min_rally_duration:
             self.impact_count += 1
             self.impacts.append({
@@ -164,17 +254,34 @@ class SmartImpactDetector:
             })
             self.rally_start = None
             self.consecutive_detections = 0
+            # НЕ очищаем историю - нужна для следующих ударов!
             return True
-        
         self.rally_start = None
         self.consecutive_detections = 0
+        # НЕ очищаем историю - нужна для следующих ударов!
         return False
 
 class BallTracker:
-    def __init__(self, model_path, frame_height, fps):
+    def __init__(self, model_path, frame_width, frame_height, fps, output_dir, impact_params=None):
         self.model = YOLO(model_path)
         self.kalman = KalmanFilter()
         self.impact_detector = SmartImpactDetector(frame_height, fps)
+        self.frame_width = frame_width
+        self.frame_height = frame_height
+        self.output_dir = output_dir
+        
+        # Если передали параметры из конфига - используем их
+        if impact_params:
+            if 'min_rally_duration' in impact_params:
+                self.impact_detector.min_rally_duration = impact_params['min_rally_duration']
+            if 'min_velocity' in impact_params:
+                self.impact_detector.min_velocity = impact_params['min_velocity']
+            if 'min_consecutive_detections' in impact_params:
+                self.impact_detector.min_consecutive_detections = impact_params['min_consecutive_detections']
+            if 'max_direction_change' in impact_params:
+                self.impact_detector.max_direction_change = impact_params['max_direction_change']
+            if 'min_frame_gap' in impact_params:
+                self.impact_detector.min_frame_gap = impact_params['min_frame_gap']
         
         self.trajectory = deque(maxlen=100)
         self.velocities = deque(maxlen=15)
@@ -182,13 +289,17 @@ class BallTracker:
         self.missed_frames = 0
         self.kalman_predictions_used = 0
         self.fps = fps
+        self.table_polygon = None
+        self.table_class_id = impact_params.get('table_class_id', 4) if impact_params else 4
         
     def detect_ball(self, frame):
         results = self.model.predict(frame, conf=0.1, verbose=False)
+        result = results[0]
+        self._maybe_update_table_polygon(result, frame)
         
-        if results[0].boxes is not None and len(results[0].boxes) > 0:
-            class_ids = results[0].boxes.cls.cpu().numpy().astype(int)
-            boxes = results[0].boxes.xyxy.cpu().numpy()
+        if result.boxes is not None and len(result.boxes) > 0:
+            class_ids = result.boxes.cls.cpu().numpy().astype(int)
+            boxes = result.boxes.xyxy.cpu().numpy()
             
             for box, class_id in zip(boxes, class_ids):
                 if class_id == 0:  # Ball
@@ -196,6 +307,42 @@ class BallTracker:
                     center = ((x1 + x2) / 2, (y1 + y2) / 2)
                     return center
         return None
+
+    def _maybe_update_table_polygon(self, result, frame):
+        if self.table_polygon is not None:
+            return
+        if result.masks is None or result.boxes is None:
+            return
+        class_ids = result.boxes.cls.cpu().numpy().astype(int)
+        polygons = result.masks.xy
+        candidates = []
+        for idx, cls in enumerate(class_ids):
+            if cls == self.table_class_id and idx < len(polygons):
+                poly = np.array(polygons[idx], dtype=np.float32)
+                if poly.shape[0] >= 4:
+                    area = abs(cv2.contourArea(poly))
+                    candidates.append((area, poly))
+        if not candidates:
+            return
+        _, best_poly = max(candidates, key=lambda x: x[0])
+        epsilon = 0.01 * cv2.arcLength(best_poly, True)
+        approx = cv2.approxPolyDP(best_poly, epsilon, True)
+        if approx.shape[0] < 4:
+            approx = cv2.convexHull(best_poly)
+        polygon = approx.reshape(-1, 2)
+        self.table_polygon = polygon
+        self.impact_detector.table_polygon = polygon
+        self.impact_detector.table_polygon_cv = polygon.reshape(-1, 1, 2).astype(np.float32)
+        self.impact_detector.table_zone_start = int(np.mean(polygon[:, 1]))
+        debug_img = frame.copy()
+        cv2.polylines(debug_img, [self.impact_detector.table_polygon_cv.astype(np.int32)], True, (0, 0, 255), 2)
+        overlay = debug_img.copy()
+        cv2.fillPoly(overlay, [self.impact_detector.table_polygon_cv.astype(np.int32)], (0, 0, 255))
+        debug_img = cv2.addWeighted(overlay, 0.2, debug_img, 0.8, 0)
+        if self.output_dir:
+            debug_path = os.path.join(self.output_dir, "table_polygon_debug.png")
+            cv2.imwrite(debug_path, debug_img)
+            print(f"[+] Table polygon captured → {debug_path}")
     
     def track_ball(self, frame, frame_idx, fps_time):
         detection = self.detect_ball(frame)
@@ -214,22 +361,16 @@ class BallTracker:
                 speed = math.sqrt(dx*dx + dy*dy)
                 self.velocities.append(speed)
                 
-                # Анализируем удар об стол (нужна история из 4+ точек)
-                if len(self.trajectory) >= 4:
-                    pos1 = self.trajectory[-4]
-                    pos2 = self.trajectory[-3]
-                    pos3 = self.trajectory[-2]
-                    pos4 = self.trajectory[-1]
-                    
-                    if self.impact_detector.detect_impact(pos1, pos2, pos3, pos4, frame_idx):
-                        # Это потенциальный удар
-                        self.impact_detector.process_detection(detection, frame_idx, fps_time)
+                # Анализируем удар об стол по ВОГНУТОЙ траектории
+                impact_meta = self.impact_detector.detect_impact(detection, frame_idx, pixel_position=detection)
+                if impact_meta:
+                    self.impact_detector.process_detection(detection, frame_idx, fps_time, impact_meta)
         else:
             self.missed_frames += 1
             
             # Если пропустили > 5 кадров - завершаем ралли
             if self.missed_frames > 5:
-                fps_time = (frame_idx / self.fps) if self.fps > 0 else 0
+                # fps_time уже передается в track_ball параметром и содержит правильное время!
                 self.impact_detector.finalize_rally(frame_idx, fps_time)
             
             if self.kalman.initialized:
@@ -290,6 +431,9 @@ class BallTracker:
         # Зона стола
         table_zone = self.impact_detector.table_zone_start
         cv2.line(annotated, (0, table_zone), (annotated.shape[1], table_zone), (200, 200, 200), 1)
+        if self.impact_detector.table_polygon_cv is not None:
+            poly = self.impact_detector.table_polygon_cv.astype(np.int32)
+            cv2.polylines(annotated, [poly], True, (120, 120, 255), 2)
         
         # СТАТИСТИКА
         y_pos = 30
@@ -302,8 +446,39 @@ class BallTracker:
         cv2.putText(annotated, f"Trajectory: {len(self.trajectory)}", 
                    (10, y_pos), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         y_pos += 30
-        cv2.putText(annotated, f"[RED] IMPACTS (SMART): {self.impact_detector.impact_count}", 
+        impacts_logged = len(self.impact_detector.live_impacts)
+        cv2.putText(annotated, f"[RED] IMPACTS (SMART): {impacts_logged}", 
                    (10, y_pos), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+        y_pos += 30
+
+        last_event = None
+        if impacts_logged > 0:
+            last_event = self.impact_detector.live_impacts[-1]
+            for event in self.impact_detector.live_impacts[-8:]:
+                hit_x = int(event['x'])
+                hit_y = int(event['y'])
+                cv2.circle(annotated, (hit_x, hit_y), 6, (0, 0, 255), 2)
+
+        if last_event:
+            cv2.putText(
+                annotated,
+                f"Impact#{impacts_logged}: in {last_event['incoming_speed']:.1f}px out {last_event['outgoing_speed']:.1f}px",
+                (10, y_pos),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.65,
+                (0, 255, 255),
+                2
+            )
+            y_pos += 25
+            cv2.putText(
+                annotated,
+                f"Pos ({last_event['x']:.0f}, {last_event['y']:.0f}) Curv {last_event['curvature']:.1f}",
+                (10, y_pos),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.65,
+                (0, 255, 255),
+                2
+            )
         
         if len(self.velocities) > 0:
             avg_speed = np.mean(list(self.velocities)[-5:])
@@ -318,10 +493,40 @@ class BallTracker:
         
         return annotated
 
+def load_config(config_path):
+    """Загружает конфиг из JSON файла"""
+    if not os.path.exists(config_path):
+        print(f"[!] Ошибка: конфиг не найден: {config_path}")
+        return None
+    
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+
 def main():
-    model_path = "runs/segment/train10/weights/best.pt"
-    video_path = "sources/GX010138.MP4"
-    output_dir = "results/track_2sec_smart_impacts"
+    # CLI параметры
+    parser = argparse.ArgumentParser(description='Трекинг мяча в настольном теннисе')
+    parser.add_argument('--video', required=True, help='Путь к видео файлу')
+    parser.add_argument('--start', type=int, required=True, help='Начало сегмента в секундах')
+    parser.add_argument('--end', type=int, required=True, help='Конец сегмента в секундах')
+    parser.add_argument('--config', default='scripts/config/detection_params.json', 
+                       help='Путь к конфиг файлу (default: scripts/config/detection_params.json)')
+    
+    args = parser.parse_args()
+    
+    # Загружаем конфиг
+    config = load_config(args.config)
+    if not config:
+        return
+    
+    # Переопределяем из CLI
+    video_path = args.video
+    start_time = args.start
+    end_time = args.end
+    
+    # Используем конфиг
+    model_path = config['yolo']['model_path']
+    output_dir = config['output']['output_dir']
     
     if not os.path.exists(model_path) or not os.path.exists(video_path):
         print("[!] Ошибка: модель или видео не найдены")
@@ -336,14 +541,14 @@ def main():
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
     print(f"    Разрешение: {frame_width}x{frame_height}, FPS: {fps:.2f}")
+    print(f"[*] Сегмент: {start_time}-{end_time} сек")
     
-    # 2 сек (06:35 - 06:37)
-    start_time = 6 * 60 + 35
-    end_time = 6 * 60 + 37
     start_frame = int(start_time * fps)
     end_frame = int(end_time * fps)
     
-    tracker = BallTracker(model_path, frame_height, fps)
+    # Передаем параметры impact_detection из конфига
+    impact_params = config.get('impact_detection', {})
+    tracker = BallTracker(model_path, frame_width, frame_height, fps, output_dir, impact_params)
     
     print("[*] Создаю видео со SMART обнаружением ударов...")
     output_video = os.path.join(output_dir, "tracked_2sec_smart_impacts.mp4")
@@ -352,8 +557,12 @@ def main():
     
     cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
     processed_count = 0
+    total_frames = max(1, end_frame - start_frame)
+    processing_start = time.perf_counter()
+    frame_durations = []
     
     for frame_idx in range(end_frame - start_frame):
+        frame_loop_start = time.perf_counter()
         ret, frame = cap.read()
         if not ret:
             break
@@ -374,12 +583,26 @@ def main():
         out.write(annotated)
         
         processed_count += 1
+        frame_duration = time.perf_counter() - frame_loop_start
+        frame_durations.append(frame_duration)
         
-        if (processed_count) % 30 == 0:
-            print(f"    Обработано {processed_count} кадров, SMART ударов: {tracker.impact_detector.impact_count}")
+        if processed_count % 30 == 0 or processed_count == 1:
+            elapsed = time.perf_counter() - processing_start
+            effective_fps = processed_count / elapsed if elapsed > 0 else 0
+            progress_pct = (processed_count / total_frames) * 100
+            print(f"[PROGRESS] {processed_count}/{total_frames} "
+                  f"({progress_pct:.1f}%) | SMART: {tracker.impact_detector.impact_count} | "
+                  f"FPS: {effective_fps:.2f}")
     
     cap.release()
     out.release()
+    processing_total = time.perf_counter() - processing_start
+    
+    # Завершаем ПОСЛЕДНИЙ ралли если он не завершен
+    # NOTE: fps_frame_time это глобальное время от начала видео, а не от начала сегмента!
+    final_frame_in_video = start_frame + processed_count
+    final_fps_time = (final_frame_in_video / tracker.fps) if tracker.fps > 0 else 0
+    tracker.impact_detector.finalize_rally(final_frame_in_video, final_fps_time)
     
     print(f"\n[+] ВИДЕО: {output_video}")
     print(f"\n[=] РЕЗУЛЬТАТЫ (SMART ЛОГИКА из smart_tracking):")
@@ -391,9 +614,20 @@ def main():
     
     print(f"\n[*] ИСПОЛЬЗУЕМЫЕ ПАРАМЕТРЫ из smart_tracking анализа:")
     print(f"    max_direction_change: {tracker.impact_detector.max_direction_change}°")
-    print(f"    min_rally_duration: {tracker.impact_detector.min_rally_duration} сек")
+    print(f"    min_rally_duration: {tracker.impact_detector.min_rally_duration} сек (из конфига: {impact_params.get('min_rally_duration', 'НЕ ЗАДАН')})")
     print(f"    min_velocity: {tracker.impact_detector.min_velocity} пикс/кадр")
     print(f"    min_consecutive_detections: {tracker.impact_detector.min_consecutive_detections}")
+    
+    avg_frame_time = (processing_total / processed_count) if processed_count > 0 else 0
+    min_frame_time = min(frame_durations) if frame_durations else 0
+    max_frame_time = max(frame_durations) if frame_durations else 0
+    effective_fps_total = processed_count / processing_total if processing_total > 0 else 0
+    
+    print(f"\n[TIMING] Total: {processing_total:.2f}s | "
+          f"Avg/frame: {avg_frame_time*1000:.2f} ms | "
+          f"Min: {min_frame_time*1000:.2f} ms | "
+          f"Max: {max_frame_time*1000:.2f} ms | "
+          f"Effective FPS: {effective_fps_total:.2f}")
     
     # Сохраняем анализ
     analysis = {
@@ -406,14 +640,32 @@ def main():
             'min_rally_duration': tracker.impact_detector.min_rally_duration,
             'min_velocity': tracker.impact_detector.min_velocity,
             'min_consecutive_detections': tracker.impact_detector.min_consecutive_detections
+        },
+        'timing': {
+            'total_seconds': processing_total,
+            'avg_ms_per_frame': avg_frame_time * 1000,
+            'min_ms_per_frame': min_frame_time * 1000,
+            'max_ms_per_frame': max_frame_time * 1000,
+            'effective_fps': effective_fps_total,
+            'processed_frames': processed_count
+        },
+        'segment': {
+            'video': video_path,
+            'start': start_time,
+            'end': end_time
         }
     }
     
     json_path = os.path.join(output_dir, "smart_impacts_analysis.json")
-    with open(json_path, 'w') as f:
-        json.dump(analysis, f, indent=2)
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(analysis, f, ensure_ascii=False, indent=2)
+    
+    live_impacts_path = os.path.join(output_dir, "live_impacts.json")
+    with open(live_impacts_path, 'w', encoding='utf-8') as f:
+        json.dump(tracker.impact_detector.live_impacts, f, ensure_ascii=False, indent=2)
     
     print(f"    Анализ: {json_path}")
+    print(f"    Live impacts log: {live_impacts_path}")
 
 if __name__ == "__main__":
     main()

@@ -77,6 +77,7 @@
 | `table_impact_angle_threshold` | 25° | Минимум угла перелома |
 | `table_impact_speed_threshold` | 5 | Минимум ускорения (пиксель/кадр) |
 | `table_impact_direction_threshold` | -20° | Макс угол движения вниз |
+| `min_frame_gap` | 6 кадров | Объединяет близкие переломы в один удар |
 
 ---
 

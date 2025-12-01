@@ -10,11 +10,13 @@
 
 ✅ **Детектирование мяча** - YOLOv8 сегментация (train10)  
 ✅ **Трекинг траектории** - Калман фильтр для сглаживания  
-✅ **Обнаружение ударов** - Перломы траектории о стол  
-✅ **Определение sender/receiver** - Кто ударил (левая/правая сторона)  
+✅ **Обнаружение ударов** - ВОГНУТАЯ траектория (вниз-вверх паттерн)  
+✅ **История траектории** - Последние 10 точек для анализа кривизны  
+✅ **Параметры в JSON** - Загружаемые значения из scripts/config/detection_params.json  
 ✅ **Визуализация** - Траектория, удары, время на видео  
-✅ **JSON экспорт** - Данные об ударах и rally  
+✅ **JSON экспорт** - Данные об ударах  
 ✅ **Потоковая обработка** - Обработка видео frame-by-frame  
+✅ **CLI интерфейс** - `--video`, `--start`, `--end`, `--config`  
 
 ---
 
@@ -100,19 +102,32 @@ Table-Tennis-CV-Score/
 pip install opencv-python numpy ultralytics
 ```
 
-### Запуск системы подсчета
+### Запуск системы отслеживания ударов
 ```bash
-python scripts/main_processor.py
+# Базовый запуск (используется конфиг по умолчанию)
+python scripts/main_processor.py --video sources/GX010138.MP4 --start 10 --end 30
+
+# С пользовательским конфигом
+python scripts/main_processor.py \
+  --video sources/GX010138.MP4 \
+  --start 395 --end 397 \
+  --config scripts/config/detection_params.json
 ```
 
-**Параметры:**
-- Видео: `sources/GX010138.MP4`
-- Временной отрезок: 5 минут из середины видео
-- Выход видео: `results/videos/`
-- Выход анализа: `results/data/` (JSON)
-- Результат: 
-  - MP4 видео со счетом и траекторией
-  - JSON файлы с анализом ударов и rally
+**Параметры CLI:**
+- `--video` - Путь к видеофайлу (обязательно)
+- `--start` - Начало сегмента в секундах (обязательно)
+- `--end` - Конец сегмента в секундах (обязательно)
+- `--config` - Путь к конфигу (опционально, default: scripts/config/detection_params.json)
+
+**Impact detection (scripts/config/detection_params.json):**
+- `min_consecutive_detections` – минимум подряд вогнутых точек
+- `min_frame_gap` – минимальный разрыв по кадрам между разными ударами (по умолчанию 6 @ 60 fps ≈ 0.1 с)
+
+**Выход:**
+- MP4 видео: `results/current_run/tracked_2sec_smart_impacts.mp4`
+- JSON анализ: `results/current_run/smart_impacts_analysis.json`
+- Live impacts: `results/current_run/live_impacts.json` (каждый перелом траектории)
 
 ---
 
