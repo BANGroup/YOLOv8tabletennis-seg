@@ -137,3 +137,6 @@ professional_tracking_results/
 smart_tracking_results/
 segmentation_results/
 test_results/
+*.mp4
+*.pt
+multiagent_template

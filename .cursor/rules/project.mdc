@@ -1,0 +1,25 @@
+---
+description: Project Rules — entrypoint
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+# Project Rules
+
+Источник истины по правилам: `.cursor/rules/*.mdc` (модульно).
+
+Этот `project.mdc` — служебная "обвязка" для auto-apply в Cursor и **не содержит** копии правил,
+чтобы исключить дрейф и конфликты требований.
+
+Всегда применяются:
+- `00_global_always.mdc` — глобальные принципы разработки
+- `90_multiagent_workflow.mdc` — мультиагентный workflow
+- плюс scoped-правила по globs для затронутых файлов
+
+<!-- КАСТОМИЗАЦИЯ: добавьте ваши scoped-правила по мере роста проекта.
+Примеры:
+- 10_backend_api.mdc       (globs: "src/backend/**")
+- 20_frontend_components.mdc (globs: "src/frontend/**")
+- 30_database_migrations.mdc (globs: "migrations/**")
+-->

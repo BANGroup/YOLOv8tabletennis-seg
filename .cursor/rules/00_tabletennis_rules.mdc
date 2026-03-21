@@ -1,0 +1,50 @@
+---
+description: Глобальные правила для проекта Table Tennis Tracking
+alwaysApply: true
+---
+
+# Правила проекта YOLOv8 Table Tennis
+
+## Технологический стек
+- Python 3.12
+- YOLOv8 (ultralytics)
+- OpenCV (cv2)
+- NumPy
+
+## Зоны кода
+
+| Зона | Файлы | Ответственный |
+|------|-------|---------------|
+| Трекинг | `scripts/*_processor*.py` | coder-tracking |
+| Счёт | `scripts/serve_detector.py` (scoring) | coder-scoring |
+| Модель | `runs/segment/**` | governance required |
+| Конфиг | `scripts/config/**` | governance required |
+
+## КРИТИЧЕСКИЕ ЗАПРЕТЫ
+
+1. **НЕ МЕНЯТЬ** `main_processor_stable.py` — это эталон
+2. **НЕ МЕНЯТЬ** параметры детекции без тестирования
+3. **НЕ УДАЛЯТЬ** рабочие версии скриптов
+4. **НЕ ПЕРЕОБУЧАТЬ** модель без явного разрешения
+
+## Governance Gates (требуют OK человека)
+
+- Изменение `min_frame_gap`, `y_range`, `curvature`
+- Изменение логики подсчёта очков
+- Переобучение YOLO модели
+- Удаление файлов
+
+## Тестирование
+
+После ЛЮБЫХ изменений в трекинге:
+```bash
+python scripts/main_processor_stable.py --video GX010025_20sec_raw.mp4 --start 0 --end 20
+# Ожидается: ~15 ударов, Left ≈ Right
+```
+
+## Капсулы контекста
+
+Перед работой прочитай релевантную капсулу:
+- Трекинг → `docs/tracking_capsule.md`
+- Счёт → `docs/scoring_capsule.md`
+- Модель → `docs/yolo_model_capsule.md`

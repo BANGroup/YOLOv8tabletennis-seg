@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  tabletennis-tracker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tt-tracker
+    
+    # Для GPU (NVIDIA)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    
+    volumes:
+      # Исходные видео (монтируем извне)
+      - ./sources:/app/sources:ro
+      # Результаты (запись)
+      - ./results:/app/results
+      # Модели (только чтение)
+      - ./runs/segment/train10:/app/runs/segment/train10:ro
+      # Конфиг
+      - ./scripts/config:/app/scripts/config
+    
+    working_dir: /app
+    
+    # Пример запуска трекинга
+    # command: ["scripts/main_processor_v2.py", "--video", "sources/GX010138.MP4", "--start", "395", "--end", "415"]
+    
+    # По умолчанию - справка
+    command: ["scripts/main_processor.py", "--help"]
+
+  # Сервис для интерактивной работы
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tt-dev
+    volumes:
+      - ./:/app
+    working_dir: /app
+    stdin_open: true
+    tty: true
+    entrypoint: ["/bin/bash"]
+
+
+
+
+
+

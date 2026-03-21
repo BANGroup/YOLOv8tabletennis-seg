@@ -1,0 +1,67 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.cursor/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Временные файлы
+*.log
+*.tmp
+*.temp
+
+# Большие файлы (монтируем отдельно)
+sources/*.MP4
+sources/*.mp4
+sources/*.avi
+*.MP4
+*.mp4
+*.avi
+
+# Результаты (монтируем отдельно)
+results/experimental/*.mp4
+results/experimental/*.avi
+
+# Модели YOLO кэш
+runs/detect/
+runs/segment/train/
+runs/segment/train2/
+runs/segment/train3/
+runs/segment/train4/
+runs/segment/train5/
+runs/segment/train6/
+runs/segment/train7/
+runs/segment/train8/
+runs/segment/train9/
+
+# Оставляем только лучшую модель train10
+!runs/segment/train10/
+
+# Бэкапы датасета
+dataset_backup/
+
+
+
+
+
+
