@@ -1,3 +1,9 @@
+---
+name: coder-scoring
+description: Логика подсчёта очков и игровых событий в serve_detector (scoring).
+model: composer-2.5-fast
+---
+
 # Coder-Scoring Agent
 
 ## Роль

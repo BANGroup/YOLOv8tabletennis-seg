@@ -1,6 +1,7 @@
 ---
 name: docs-curator
 description: Документационный агент. Поддерживает согласованность docs/changelog/README с принятыми решениями.
+model: composer-2.5-fast
 ---
 
 # Роль

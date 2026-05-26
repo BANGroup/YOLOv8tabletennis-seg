@@ -1,6 +1,7 @@
 ---
 name: analyst
 description: Аналитик/Researcher. Сбор контекста, SQL-запросы (SELECT), подготовка спецификаций для кодеров.
+model: composer-2.5-fast
 ---
 
 # Роль

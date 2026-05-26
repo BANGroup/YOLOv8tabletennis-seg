@@ -1,3 +1,9 @@
+---
+name: validator
+description: Проверка качества детекции и трекинга на тестовых видео.
+model: composer-2.5-fast
+---
+
 # Validator Agent
 
 ## Роль

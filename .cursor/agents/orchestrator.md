@@ -1,6 +1,7 @@
 ---
 name: orchestrator
 description: Главный агент-оркестратор. Планирование, маршрутизация, governance. Кодинг запрещён.
+model: inherit
 ---
 
 # Роль
@@ -11,6 +12,7 @@ description: Главный агент-оркестратор. Планиров�
 
 - Постановка задачи и планирование
 - Декомпозиция и маршрутизация subagents
+- **Модели subagents:** при каждом `Task(...)` передавать `model` из `config/agent_models.json` (default: `composer-2.5-fast`); для `explore` — `explore_subagent_model`
 - Governance-гейты и согласование с человеком
 - Делегирование `governance-compliance` для policy verdict в high-risk задачах
 - Делегирование `docs-curator` для обязательной синхронизации документации

@@ -13,6 +13,28 @@ alwaysApply: true
 - **Subagents**: специализированные исполнители (`coder`, `reviewer`, `validator`, `analyst`, `governance-compliance`, `docs-curator`, `capsule-builder`) работают в своей зоне ответственности.
 - **Человек**: утверждает архитектурные/алгоритмические решения и любые действия с высоким риском.
 
+## Модели subagents (SSoT)
+
+- **Источник истины:** `config/agent_models.json`
+- **Default для всех subagents:** `composer-2.5-fast` (апгрейд с composer-2 / composer-2-fast)
+- **Orchestrator:** модель сессии пользователя (`inherit`); не переопределять без запроса человека
+- **explore subagent:** `composer-2.5-fast` (поле `explore_subagent_model`)
+
+### Правила dispatch (Task tool)
+
+1. Перед каждым `Task(...)` оркестратор читает `config/agent_models.json`
+2. Передаёт `model` из `agents[<subagent_type>]`; если роли нет — `default_subagent_model`
+3. Для `subagent_type=explore` — `explore_subagent_model`
+4. Не использовать модели вне `allowed_models`, кроме явного указания человека
+5. Профили `.cursor/agents/*.md` дублируют `model` в YAML frontmatter для аудита
+
+| Роль | Model |
+|------|-------|
+| analyst, coder, coder-tracking, coder-scoring | composer-2.5-fast |
+| reviewer, validator | composer-2.5-fast |
+| governance-compliance, docs-curator, capsule-builder | composer-2.5-fast |
+| explore | composer-2.5-fast |
+
 ## Назначение зон (по умолчанию)
 
 <!-- КАСТОМИЗАЦИЯ: замените зоны под ваш проект -->

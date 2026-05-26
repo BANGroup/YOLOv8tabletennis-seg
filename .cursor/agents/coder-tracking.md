@@ -1,3 +1,9 @@
+---
+name: coder-tracking
+description: Разработка трекинга мяча и детекции ударов (scripts/main_processor*, serve_detector tracking, core/).
+model: composer-2.5-fast
+---
+
 # Coder-Tracking Agent
 
 ## Роль

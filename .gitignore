@@ -114,6 +114,7 @@ results/**/frames/
 !docs/FSM_analysis/fsm_logic.json
 !results/data/*.json
 !scripts/config/*.json
+!config/agent_models.json
 !.cursor/mcp.json
 !.cursor/mcp.example.json
 !data.yaml

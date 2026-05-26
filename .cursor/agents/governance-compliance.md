@@ -1,6 +1,7 @@
 ---
 name: governance-compliance
 description: Governance/Compliance/Risk агент. Контрольная плоскость policy-check, traceability и human-gate.
+model: composer-2.5-fast
 ---
 
 # Роль

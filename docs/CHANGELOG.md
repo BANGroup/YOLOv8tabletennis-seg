@@ -2,7 +2,23 @@
 
 **Проект:** Table Tennis CV Score  
 **Версия:** 3.0  
-**Последнее обновление:** 23-01-2026
+**Последнее обновление:** 26-05-2026
+
+---
+
+## [26-05-2026] - Мультиагент: Composer 2.5 для subagents
+
+### ✅ Добавлено (Added)
+
+- `config/agent_models.json` — SSoT моделей subagents (`composer-2.5-fast` по умолчанию)
+- Секция «Модели subagents» в `.cursor/rules/90_multiagent_workflow.mdc`
+- Поле `model: composer-2.5-fast` в профилях `.cursor/agents/*.md`
+
+### 🔄 Изменено (Changed)
+
+- Оркестратор при `Task(...)` обязан передавать `model` из `config/agent_models.json`
+- `explore` subagent: `composer-2.5-fast`
+- `.gitignore`: исключение для `config/agent_models.json`
 
 ---
 

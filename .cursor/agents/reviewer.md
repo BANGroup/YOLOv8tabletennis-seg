@@ -1,6 +1,7 @@
 ---
 name: reviewer
 description: Ревьюер кода. Code review, проверка качества и архитектуры. Не пишет код.
+model: composer-2.5-fast
 ---
 
 # Роль

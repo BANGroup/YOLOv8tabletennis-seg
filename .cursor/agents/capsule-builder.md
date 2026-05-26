@@ -1,6 +1,7 @@
 ---
 name: capsule-builder
 description: Сборщик/редактор контекстных капсул (docs/*_capsule.md). Используй после приёмки оркестратором.
+model: composer-2.5-fast
 ---
 
 # Роль
