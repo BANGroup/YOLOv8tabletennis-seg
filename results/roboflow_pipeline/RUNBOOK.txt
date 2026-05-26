@@ -1,0 +1,60 @@
+Roboflow Labeling Pipeline — RUNBOOK
+Дата: 2026-05-26
+Проект: auto-label-lmrwb (yolo-table-tennis)
+
+=== Расположение ===
+Все скрипты и артефакты: results/roboflow_pipeline/
+Конфиг: results/roboflow_pipeline/config/pipeline.json
+API key: .env ROBOFLOW_API_KEY
+Модель pre-label: runs/segment/train12_ball68/weights/best.pt
+
+=== Быстрый smoke test (без видео) ===
+  bash results/roboflow_pipeline/run_pilot.sh
+
+Шаги pilot:
+  1. sample 20 кадров из dataset/train (frame_000*, с Ball)
+  2. pre-label train12 -> YOLO detection bbox
+  3. zip images/ + labels/
+  4. upload в Roboflow batch tt_pilot_smoke_<date>
+
+=== Полный конвейер (видео) ===
+  cd results/roboflow_pipeline/scripts
+  RUN=../runs/my_batch_20260526
+  python3 sample_frames.py --video path/to/video.mp4 --count 120 --strategy combined --output $RUN
+  python3 prelabel_yolo_det.py --run-dir $RUN
+  python3 build_upload_zip.py --run-dir $RUN
+  python3 upload_batch.py --run-dir $RUN --batch-name tt_my_batch_20260526
+  python3 run_autolabel_matrix.py --run-dir $RUN
+  python3 export_version.py --run-dir $RUN --version <N>
+
+=== Sampling strategies ===
+  uniform   — равномерный stride по видео
+  missed    — кадры после детекции, где мяч пропущен (логика find_missed_balls)
+  low_conf  — детекции Ball в диапазоне conf [0.03, 0.25]
+  combined  — объединение всех стратегий (default)
+
+=== Autolabel matrix ===
+  M1: model_type=roboflow, model=yolo-table-tennis/auto-label-lmrwb-instant-1
+  M2: model_type=foundational, model=sam3, ontology Ball/Net/Table/Player1/Player2
+
+=== Артефакты run dir ===
+  images/              — sampled frames
+  labels/              — YOLO detection pre-labels
+  manifest.json        — metadata sampling
+  prelabel_report.json — stats pre-label
+  upload.zip           — zip для Roboflow
+  state.json           — task_id, batch_id, autolabel jobs
+  autolabel_matrix_report.json
+
+=== Классы YOLO (detection) ===
+  0 Ball, 1 Net, 2 Player1, 3 Player2, 4 Table
+
+=== Troubleshooting ===
+  - ROBOFLOW_API_KEY: проверить .env в корне проекта
+  - batch_id null после upload: открыть state.json, проверить upload_status; batch name в Roboflow UI
+  - autolabel требует batch_id в state.json (сначала upload_batch.py)
+  - Float32 координаты в prelabel_yolo_det.py (xyxy -> normalized bbox)
+
+=== Ручной review (human gate) ===
+  После upload и autolabel — проверка в app.roboflow.com:
+  Annotate -> batch -> сравнение pre-label / M1 / M2 -> approve -> Generate Version

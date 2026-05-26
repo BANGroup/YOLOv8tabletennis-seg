@@ -22,6 +22,7 @@ wheels/
 MANIFEST
 .env
 .venv
+.venv_train/
 env/
 venv/
 ENV/
@@ -126,6 +127,10 @@ results/**/frames/
 # dataset/ - СОХРАНЯЕМ (содержит обучающие данные)
 # dataset_backup/ - СОХРАНЯЕМ (резервная копия)
 # НЕ ИГНОРИРУЮТСЯ - просто оставляем как есть
+**/labels.cache
+
+# Временный импорт датасетов (Roboflow и т.п.)
+results/import_*_tmp/
 
 # ============================================
 # ИСКЛЮЧЕНИЕ: Старые мусорные папки
@@ -145,4 +150,8 @@ test_results/
 *.pt
 !runs/segment/train12_ball68/weights/best.pt
 !runs/segment/train12_ball68/weights/last.pt
+
+# Дубль project=runs/segment (Ultralytics): runs/segment/runs/segment/...
+runs/segment/runs/
+
 multiagent_template
