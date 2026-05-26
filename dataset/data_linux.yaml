@@ -1,0 +1,8 @@
+# Абсолютный путь для Linux (дообучение с новыми 68 кадрами мяча)
+path: /home/misha/Рабочий стол/YOLOv8tabletennis/YOLOv8tabletennis-seg-main/dataset
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 5
+names: ['Ball', 'Net', 'Player1', 'Player2', 'Table']

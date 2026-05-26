@@ -1,0 +1,9 @@
+{
+  "workspace": "yolo-table-tennis",
+  "project": "auto-label-lmrwb",
+  "dataset_version": 6,
+  "universe_url": "https://universe.roboflow.com/yolo-table-tennis/auto-label-lmrwb/dataset/6",
+  "classes": ["Ball", "Net", "Player1", "Player2", "Table"],
+  "local_model": "runs/segment/train12_ball68/weights/best.pt",
+  "notes": "Используется Roboflow MCP (см. .cursor/mcp.json). API-ключ — в .env ROBOFLOW_API_KEY."
+}

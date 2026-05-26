@@ -113,6 +113,9 @@ results/**/frames/
 *.json
 !docs/FSM_analysis/fsm_logic.json
 !results/data/*.json
+!scripts/config/*.json
+!.cursor/mcp.json
+!.cursor/mcp.example.json
 !data.yaml
 
 # ============================================
@@ -139,4 +142,6 @@ segmentation_results/
 test_results/
 *.mp4
 *.pt
+!runs/segment/train12_ball68/weights/best.pt
+!runs/segment/train12_ball68/weights/last.pt
 multiagent_template

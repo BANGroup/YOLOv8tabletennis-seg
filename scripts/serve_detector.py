@@ -547,7 +547,10 @@ class BallTracker:
         self.play_zone_margin_y = 100  # Небольшой запас по Y (для подбросов)
         self.table_bottom_y = None
         self.table_top_y = None
-        self.net_bbox = None   # Bounding box сетки [x1,y1,x2,y2]
+        self.net_bbox = None   # Bounding box сетки [x1,y1,x2,y2] (для совместимости)
+        self.net_polygon = None      # Полигон маски сетки (Nx2)
+        self.net_polygon_cv = None   # Тот же полигон в формате cv2 (Nx1x2 float32)
+        self.net_axis = None         # Ось сетки (vx, vy, x0, y0) от cv2.fitLine
         
     def detect_ball(self, frame):
         results = self.model.predict(frame, conf=0.1, verbose=False)
@@ -555,16 +558,37 @@ class BallTracker:
         self._maybe_update_table_polygon(result, frame)
         self._maybe_update_net(result)
         
-        if result.boxes is not None and len(result.boxes) > 0:
-            class_ids = result.boxes.cls.cpu().numpy().astype(int)
-            boxes = result.boxes.xyxy.cpu().numpy()
+        if result.boxes is None or len(result.boxes) == 0:
+            return None
+        
+        class_ids = result.boxes.cls.cpu().numpy().astype(int)
+        boxes = result.boxes.xyxy.cpu().numpy()
+        confs = (result.boxes.conf.cpu().numpy()
+                 if getattr(result.boxes, 'conf', None) is not None else None)
+        
+        # Из всех детекций мяча оставляем самую уверенную в зоне игры.
+        # Это убирает ложные срабатывания на пылесосе, кружках, тенях и
+        # т.п. вне стола. Если play_zone ещё не задана (стол не найден),
+        # возвращаемся к старому поведению: первая попавшаяся детекция.
+        best_center = None
+        best_conf = -1.0
+        for idx, (box, cls_id) in enumerate(zip(boxes, class_ids)):
+            if cls_id != 0:
+                continue
+            x1, y1, x2, y2 = box
+            center = ((x1 + x2) / 2.0, (y1 + y2) / 2.0)
             
-            for box, class_id in zip(boxes, class_ids):
-                if class_id == 0:  # Ball
-                    x1, y1, x2, y2 = box
-                    center = ((x1 + x2) / 2, (y1 + y2) / 2)
-                    return center
-        return None
+            if self.play_zone is not None:
+                if not (self.play_zone['x_min'] <= center[0] <= self.play_zone['x_max']
+                        and self.play_zone['y_min'] <= center[1] <= self.play_zone['y_max']):
+                    continue
+            
+            c = float(confs[idx]) if confs is not None else 1.0
+            if c > best_conf:
+                best_conf = c
+                best_center = center
+        
+        return best_center
 
     def _maybe_update_table_polygon(self, result, frame):
         if self.table_polygon is not None:
@@ -658,30 +682,95 @@ class BallTracker:
         print(f"[+] Table: X[{table_x_min:.0f}-{table_x_max:.0f}], center={table_center_x:.0f}")
     
     def _maybe_update_net(self, result):
-        """Детекция сетки (один раз)"""
-        if self.net_bbox is not None:
+        """Детекция сетки через СЕГМЕНТАЦИЮ (как стол), один раз.
+        Из маски берём:
+          - net_polygon (контур маски, для pointPolygonTest),
+          - net_bbox (на всякий случай, для совместимости),
+          - net_center_x (медиана X маски) — это и есть реальная
+            середина стола, которой делим P1 / P2.
+        Если сетка задетектирована — переопределяем
+        impact_detector.table_center_x значением от сетки
+        (приоритетнее, чем середина bbox стола).
+        """
+        if self.net_polygon is not None:
             return
-        if result.boxes is None:
+        if result.masks is None or result.boxes is None:
             return
         
         class_ids = result.boxes.cls.cpu().numpy().astype(int)
-        boxes = result.boxes.xyxy.cpu().numpy()
+        polygons = result.masks.xy
         
-        for box, cls in zip(boxes, class_ids):
-            if cls == self.net_class_id:
-                self.net_bbox = box  # [x1, y1, x2, y2]
-                net_center_x = (box[0] + box[2]) / 2
-                self.impact_detector.net_zone_x = net_center_x
-                print(f"[+] Net detected: x={net_center_x:.0f}, bbox={box}")
-                break
+        # Собираем все маски сетки на этом кадре
+        net_polys = []
+        for idx, cls in enumerate(class_ids):
+            if cls == self.net_class_id and idx < len(polygons):
+                poly = np.array(polygons[idx], dtype=np.float32)
+                if poly.shape[0] >= 4:
+                    net_polys.append(poly)
+        
+        if not net_polys:
+            return
+        
+        # Если несколько кусков (модель иногда режет сетку) —
+        # объединяем выпуклой оболочкой, как для стола.
+        if len(net_polys) > 1:
+            all_pts = np.vstack(net_polys)
+            hull = cv2.convexHull(all_pts)
+            net_polygon = hull.reshape(-1, 2)
+        else:
+            net_polygon = net_polys[0]
+        
+        self.net_polygon = net_polygon
+        self.net_polygon_cv = net_polygon.reshape(-1, 1, 2).astype(np.float32)
+        
+        # Ось сетки (с учётом наклона) — используется в визуализации,
+        # чтобы разделительная линия P1/P2 шла именно по сетке, а не
+        # вертикально. Логику left/right (по table_center_x) не трогаем.
+        line = cv2.fitLine(net_polygon.astype(np.float32),
+                           cv2.DIST_L2, 0, 0.01, 0.01).flatten()
+        vx, vy, x0, y0 = (float(line[0]), float(line[1]),
+                          float(line[2]), float(line[3]))
+        self.net_axis = (vx, vy, x0, y0)
+        
+        # bbox оставляем для обратной совместимости (его читает draw_visualization)
+        x_min = float(np.min(net_polygon[:, 0]))
+        x_max = float(np.max(net_polygon[:, 0]))
+        y_min = float(np.min(net_polygon[:, 1]))
+        y_max = float(np.max(net_polygon[:, 1]))
+        self.net_bbox = np.array([x_min, y_min, x_max, y_max], dtype=np.float32)
+        
+        # Центр сетки = медиана X маски (устойчивее к "хвостам" контура,
+        # чем (x_min+x_max)/2). Это и есть реальная середина стола.
+        net_center_x = float(np.median(net_polygon[:, 0]))
+        self.impact_detector.net_zone_x = net_center_x
+        
+        # Сетка делит стол пополам — переопределяем center_x от сетки.
+        # Это влияет ТОЛЬКО на распределение left/right (P1/P2)
+        # в последующих ударах; уже зафиксированные удары не трогаем.
+        old_center = self.impact_detector.table_center_x
+        self.impact_detector.table_center_x = net_center_x
+        self.table_center_x = net_center_x
+        
+        print(f"[+] Net (segmentation): center_x={net_center_x:.0f}, "
+              f"bbox=[{x_min:.0f},{y_min:.0f},{x_max:.0f},{y_max:.0f}], "
+              f"table_center_x: {old_center} -> {net_center_x:.0f}")
     
     def is_ball_in_net_zone(self, ball_pos):
-        """Проверка: мяч в зоне сетки?"""
-        if self.net_bbox is None or ball_pos is None:
+        """Проверка: мяч в зоне сетки (по полигону, не bbox)."""
+        if ball_pos is None:
+            return False
+        if self.net_polygon_cv is not None:
+            dist = cv2.pointPolygonTest(
+                self.net_polygon_cv,
+                (float(ball_pos[0]), float(ball_pos[1])),
+                False
+            )
+            return dist >= 0
+        # Fallback на старую bbox-проверку, если сетка ещё не найдена сегментацией
+        if self.net_bbox is None:
             return False
         x, y = ball_pos
         x1, y1, x2, y2 = self.net_bbox
-        # Расширяем зону сетки по X на 20 пикселей
         margin = 20
         return (x1 - margin) <= x <= (x2 + margin) and y1 <= y <= y2
     
@@ -719,6 +808,13 @@ class BallTracker:
                 speed = math.sqrt(dx*dx + dy*dy)
                 self.velocities.append(speed)
                 
+                # Поддерживаем "последнюю известную" позицию/скорость для post-mortem
+                # анализа в _detect_rally_end_event (сетка/аут)
+                self.impact_detector.ball_lost_position = (float(detection[0]), float(detection[1]))
+                self.impact_detector.ball_lost_velocity = (float(dx), float(dy))
+                self.impact_detector.ball_lost_time = fps_time
+                self.impact_detector.ball_lost_frame = frame_idx
+                
                 # Анализируем удар об стол
                 impact_meta = self.impact_detector.detect_impact(detection, frame_idx, pixel_position=detection)
                 if impact_meta:
@@ -728,7 +824,45 @@ class BallTracker:
             
             # Если пропустили > 5 кадров - завершаем ралли
             if self.missed_frames > 5:
-                self.impact_detector.finalize_rally(frame_idx, fps_time)
+                # Сначала пытаемся определить причину окончания (сетка/аут).
+                # Эти ветки ничего не присудят, если очко уже было присуждено
+                # ранее (double bounce / P_X missed) — там стоит охранка
+                # point_awarded_this_rally.
+                self._detect_rally_end_event(frame_idx, fps_time)
+                
+                # Fallback: если очко всё ещё не присуждено, но последняя
+                # известная позиция мяча была явно за полигоном стола —
+                # это аут. Используем уже существующий метод is_ball_out_of_table.
+                if (not self.impact_detector.point_awarded_this_rally
+                        and len(self.impact_detector.last_rally_impacts) >= 1
+                        and self.impact_detector.ball_lost_position is not None
+                        and self.is_ball_out_of_table(self.impact_detector.ball_lost_position)):
+                    last_pos = self.impact_detector.ball_lost_position
+                    center_x = (self.impact_detector.table_center_x
+                                or self.impact_detector.net_zone_x
+                                or (self.frame_width / 2))
+                    if last_pos[0] > center_x:
+                        self.impact_detector.award_point(2, reason="P1 out (off-table)")
+                        self.impact_detector.out_events.append({
+                            'time': fps_time, 'player_fault': 1,
+                            'frame': frame_idx, 'position': last_pos, 'type': 'off_table'
+                        })
+                    else:
+                        self.impact_detector.award_point(1, reason="P2 out (off-table)")
+                        self.impact_detector.out_events.append({
+                            'time': fps_time, 'player_fault': 2,
+                            'frame': frame_idx, 'position': last_pos, 'type': 'off_table'
+                        })
+                    self.impact_detector.point_awarded_this_rally = True
+                
+                rally_finalized = self.impact_detector.finalize_rally(frame_idx, fps_time)
+                
+                # Чистим визуальную траекторию по концу розыгрыша,
+                # чтобы экран не зарастал линиями. Логику не трогаем —
+                # impact_detector сам знает свой last_rally_impacts.
+                if rally_finalized or self.impact_detector.rally_start is None:
+                    self.trajectory.clear()
+                    self.velocities.clear()
             
             if self.kalman.initialized:
                 pred = self.kalman.predict()
@@ -861,6 +995,39 @@ class BallTracker:
         if self.impact_detector.table_polygon_cv is not None:
             poly = self.impact_detector.table_polygon_cv.astype(np.int32)
             cv2.polylines(annotated, [poly], True, (120, 120, 255), 2)
+            
+            # Разделение стола на две половины. Если сетка задетектирована
+            # сегментацией — рисуем линию ВДОЛЬ ОСИ СЕТКИ (учитывая её
+            # наклон), иначе fallback на вертикальную линию по table_center_x.
+            pts = poly.reshape(-1, 2)
+            table_y_min = int(pts[:, 1].min())
+            table_y_max = int(pts[:, 1].max())
+            net_axis = getattr(self.impact_detector, 'net_axis', None)
+            if net_axis is not None:
+                vx, vy, x0, y0 = net_axis
+                if abs(vy) > 1e-6:
+                    t1 = (table_y_min - y0) / vy
+                    t2 = (table_y_max - y0) / vy
+                    nx1 = int(round(x0 + t1 * vx))
+                    nx2 = int(round(x0 + t2 * vx))
+                    cv2.line(annotated, (nx1, table_y_min), (nx2, table_y_max),
+                             (120, 120, 255), 2)
+                    label_x_left = max(min(nx1, nx2) - 60, 5)
+                    label_x_right = max(nx1, nx2) + 20
+                    cv2.putText(annotated, "P1", (label_x_left, table_y_min + 25),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (120, 120, 255), 2)
+                    cv2.putText(annotated, "P2", (label_x_right, table_y_min + 25),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (120, 120, 255), 2)
+            else:
+                center_x = self.impact_detector.table_center_x
+                if center_x is not None:
+                    cx = int(center_x)
+                    cv2.line(annotated, (cx, table_y_min), (cx, table_y_max),
+                             (120, 120, 255), 2)
+                    cv2.putText(annotated, "P1", (max(cx - 60, 5), table_y_min + 25),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (120, 120, 255), 2)
+                    cv2.putText(annotated, "P2", (cx + 20, table_y_min + 25),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (120, 120, 255), 2)
         
         # СТАТИСТИКА
         y_pos = 30
@@ -881,10 +1048,12 @@ class BallTracker:
         last_event = None
         if impacts_logged > 0:
             last_event = self.impact_detector.live_impacts[-1]
-            for i, event in enumerate(self.impact_detector.live_impacts):
+            # Рисуем удары ТОЛЬКО текущего розыгрыша, иначе экран
+            # покрывается красными точками со всего матча.
+            current_rally_impacts = list(self.impact_detector.last_rally_impacts)
+            for event in current_rally_impacts:
                 hit_x = int(event['x'])
                 hit_y = int(event['y'])
-                # Красные круги как было раньше
                 cv2.circle(annotated, (hit_x, hit_y), 8, (0, 0, 255), -1)
                 cv2.circle(annotated, (hit_x, hit_y), 10, (0, 0, 255), 2)
 
@@ -993,10 +1162,13 @@ class BallTracker:
                 cv2.putText(annotated, out_text, (out_x, 100), 
                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         
-        # === Рисуем зону сетки (если есть) ===
-        if self.net_bbox is not None:
+        # === Рисуем зону сетки (по полигону маски, fallback — bbox) ===
+        if self.net_polygon_cv is not None:
+            net_poly = self.net_polygon_cv.astype(np.int32)
+            cv2.polylines(annotated, [net_poly], True, (0, 165, 255), 2)
+        elif self.net_bbox is not None:
             x1, y1, x2, y2 = map(int, self.net_bbox)
-            cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 165, 255), 1)  # Оранжевая рамка сетки
+            cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 165, 255), 1)
         
         return annotated
 
