@@ -1,0 +1,14 @@
+path: /home/misha/Рабочий стол/YOLOv8tabletennis/YOLOv8tabletennis-seg-main/results/roboflow_pipeline/runs/tt_seg_v3_export/dataset
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 6
+names: ['Ball', 'Net', 'Player1', 'Player2', 'TableLeft', 'TableRight']
+
+roboflow:
+  workspace: yolo-table-tennis
+  project: tt-seg-img0291
+  version: 3
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/yolo-table-tennis/tt-seg-img0291/dataset/3

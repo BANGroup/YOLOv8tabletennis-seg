@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 6
+names: ['Ball', 'Net', 'Player1', 'Player2', 'TableLeft', 'TableRight']
+
+roboflow:
+  workspace: yolo-table-tennis
+  project: tt-seg-img0291
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/yolo-table-tennis/tt-seg-img0291/dataset/1

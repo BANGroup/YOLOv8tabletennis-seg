@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 from ultralytics import YOLO
 
-from roboflow_client import find_project_root
+from roboflow_client import find_project_root, load_pipeline_config, resolve_run_dir
 
 # Roboflow classes (SSoT scripts/config/roboflow.json)
 CLASS_NAMES = ["Ball", "Net", "Player1", "Player2", "Table"]
@@ -83,12 +83,9 @@ def main() -> None:
     args = parser.parse_args()
 
     root = find_project_root()
-    cfg_path = root / "results" / "roboflow_pipeline" / "config" / "pipeline.json"
-    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    cfg = load_pipeline_config(root)
 
-    run_dir = Path(args.run_dir)
-    if not run_dir.is_absolute():
-        run_dir = root / "results" / "roboflow_pipeline" / run_dir
+    run_dir = resolve_run_dir(args.run_dir, root)
 
     images_dir = Path(args.images) if args.images else run_dir / "images"
     labels_dir = Path(args.labels) if args.labels else run_dir / "labels"

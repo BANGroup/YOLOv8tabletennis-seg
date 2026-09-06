@@ -1,11 +1,12 @@
 {
   "yolo": {
-    "model_path": "runs/segment/train12_ball68/weights/best.pt",
+    "model_path": "runs/segment/train14_ttseg_v3/weights/best.pt",
     "ball_class_id": 0,
-    "table_class_id": 4
+    "table_class_id": 4,
+    "table_class_ids": [4, 5]
   },
   "output": {
-    "output_dir": "results/serve_detector_train12_img0291_v4"
+    "output_dir": "results/serve_detector_train14_img0291"
   },
   "impact_detection": {
     "min_rally_duration": 0.05,

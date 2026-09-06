@@ -54,7 +54,7 @@ git push origin main
 
 | Что | Путь |
 |-----|------|
-| Модель (seg) | `runs/segment/train12_ball68/weights/best.pt` |
+| Модель (seg) | `runs/segment/train14_ttseg_v3/weights/best.pt` |
 | Параметры детекции | `scripts/config/detection_params.json` |
 | Правило «только своя -seg модель» | `.cursorrules` |
 

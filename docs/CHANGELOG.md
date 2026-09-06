@@ -2,7 +2,106 @@
 
 **Проект:** Table Tennis CV Score  
 **Версия:** 3.0  
-**Последнее обновление:** 26-05-2026
+**Последнее обновление:** 06-09-2026 (consecfix scoring + impact timing)
+
+---
+
+## [06-09-2026] - serve_detector: consecfix + deferred scoring
+
+### 🐛 Исправлено (Fixed)
+
+- **Фильтр `min_consecutive_detections`:** вместо счётчика кандидатов удара — минимум N детекций мяча в окне ±2 кадра вокруг `bounce_frame` (`detected_frames`, `detection_window_radius=2`); имя/значение в конфиге без изменений
+- **Время удара:** `frame_history`/`time_history` → `impact_meta.bounce_frame`/`bounce_time`; вся time-логика использует их (устранено отставание 4–9 кадров)
+- **Интервал двойного отскока:** `prev_impact_time` снимается до перезаписи `last_impact_time`
+- **Аут:** виновник по `_fault_player_from_last_bounce()` — сторона последнего отскока, не X мяча
+
+### 🔄 Изменено (Changed)
+
+- **Сетка во время розыгрыша:** `is_impact_on_net()` с `NET_IMPACT_MARGIN=25` px (`pointPolygonTest`, `measureDist=True`); отложенный контакт `register_net_contact()` → `pending_net_contact` → `resolve_pending_net_contact()` / timeout `NET_PENDING_MAX_AGE=2.0` с
+- **`is_ball_in_net_zone()`:** margin 40 px от полигона Net; убраны блокирующие эвристики `speed < 15` и «движение к центру» из `_detect_rally_end_event`
+- **Двойной отскок:** `pending_double_bounce` + `_award_deferred_double_bounce()` в конце розыгрыша; `discard_stale_double_bounce()` при переходе на сторону соперника
+- **`pending_*` очищается** при новом розыгрыше и на ранних выходах `_detect_rally_end_event`
+- **Артефакты:** `smart_impacts_analysis.json` — `point_history`, `net_events`, `out_events`, `double_bounce_events`, `score`, `serve_count`; в `run_stdout.log` у очков печатается время события
+- **CLI:** `--debug-trace` (default off) → `debug_trace.json` с покадровым треком и `last_reject_reason` / `last_process_reject`
+
+### 📊 Валидация
+
+- **Видео:** IMG_0291, сегмент 45–180 s, модель train14_ttseg_v3
+- **Физические отскоки приняты (из 94):** 71 → **87**; потеряно: 22 → **7**
+- **Ударов зарегистрировано:** 66 → **85**; **счёт:** 6:9 → **8:6**
+- **Подтверждено человеком:** очки t=52.3 s (P1), 65.1 s (P2), 74.1 s (P1)
+- **Артефакт:** `results/serve_detector_train14_img0291_consecfix/tracked_v5.mp4`
+
+### ⚠️ Известные ограничения
+
+- Сетка t≈109 s — очко по-прежнему не начисляется
+- Очко t≈169.2 s исчезло: розыгрыш не закрывается аутом, тянется до двойного отскока t≈176 s
+- Потери по `min_frame_gap`: 1 → **6** кластеров (порог 12 кадров); следующий шаг — side-dependent gap
+- Ловля мяча руками не моделируется
+
+### ✅ Governance
+
+- **ApprovalGate:** human-approved после тестов на IMG_0291 consecfix
+- **TraceID:** `wf:consec_fix:2026-09-06T09:13:28Z`
+
+---
+
+## [01-09-2026] - Prod: train14 + net-fault scoring
+
+### Prod: переключение YOLO на train14_ttseg_v3
+
+### 🔄 Изменено (Changed)
+
+- **Prod YOLO:** `runs/segment/train14_ttseg_v3/weights/best.pt` (вместо train12_ball68)
+- **Классы модели:** Ball, Net, Player1, Player2, TableLeft, TableRight
+- **serve_detector:** `table_class_ids` = `[4, 5]` (TableLeft, TableRight)
+- **Rollback:** `scripts/config/detection_params_train12.json`
+
+### 📊 Валидация
+
+- **Видео:** IMG_0291, сегмент 45–180 s (4050 кадров)
+- **SMART impacts:** 67 (Left 32, Right 34)
+- **Полигоны стола:** Left 261 pts, Right 104 pts
+- **Счёт:** 8:7
+
+### ℹ️ Без изменений
+
+- `main_processor_stable.py` — не менялся (`table_class_id=4` only)
+
+### ✅ Governance
+
+- **ApprovalGate:** визуальная QA половин стола + подтверждение «давай в прод»
+- **TraceID:** `wf:train14-prod:2026-09-01T14:04:00Z`
+
+### Net-fault scoring (serve_detector)
+
+#### 🐛 Исправлено (Fixed)
+
+- **Сетка:** детекция через полигон класса Net (`pointPolygonTest`, порог `dist >= -40`) + пропадание мяча (`ball lost`)
+- **Победитель очка:** сторона последнего удара (`table_side` последнего impact)
+- Удалены эвристики `speed < 15` и `moving_towards_center` (не считали реальные попадания в сетку)
+
+#### 📊 Валидация
+
+- **Видео:** IMG_0291, сегмент 45–180 s
+- **Net faults:** 0 → 2 (t=117.17 s P2, t=153.80 s P2)
+- **SMART impacts:** 67 (без изменений)
+- **Счёт:** 8:7 → 9:6
+- **Outs:** 8 → 7
+- **Артефакт:** `results/serve_detector_train14_img0291_netfix/tracked_v5.mp4`
+
+#### ⚠️ Остаточный gap
+
+- Зафиксировано 2 net vs визуально «много» у пользователя — partial recall, требует дальнейшей калибровки
+
+#### ℹ️ Без изменений
+
+- `main_processor_stable.py` — не менялся
+
+#### ✅ Governance
+
+- **ApprovalGate:** `W_net-score-fix` — approved
+- **TraceID:** `wf:net-score-fix:2026-09-01T14:19:00Z`
 
 ---
 

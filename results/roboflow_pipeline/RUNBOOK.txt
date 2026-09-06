@@ -1,60 +1,50 @@
 Roboflow Labeling Pipeline — RUNBOOK
 Дата: 2026-05-26
-Проект: auto-label-lmrwb (yolo-table-tennis)
+Legacy det project: auto-label-lmrwb (yolo-table-tennis)
+Seg project (IMG_0291): tt-seg-img0291
 
 === Расположение ===
 Все скрипты и артефакты: results/roboflow_pipeline/
 Конфиг: results/roboflow_pipeline/config/pipeline.json
 API key: .env ROBOFLOW_API_KEY
 Модель pre-label: runs/segment/train12_ball68/weights/best.pt
+Видео pilot: sources/IMG_0291.MOV
 
-=== Быстрый smoke test (без видео) ===
+=== Быстрый smoke test (без видео, legacy det) ===
   bash results/roboflow_pipeline/run_pilot.sh
 
-Шаги pilot:
-  1. sample 20 кадров из dataset/train (frame_000*, с Ball)
-  2. pre-label train12 -> YOLO detection bbox
-  3. zip images/ + labels/
-  4. upload в Roboflow batch tt_pilot_smoke_<date>
+=== Video pipeline (hybrid_seg, IMG_0291) ===
+  bash results/roboflow_pipeline/run_video.sh
 
-=== Полный конвейер (видео) ===
-  cd results/roboflow_pipeline/scripts
-  RUN=../runs/my_batch_20260526
-  python3 sample_frames.py --video path/to/video.mp4 --count 120 --strategy combined --output $RUN
-  python3 prelabel_yolo_det.py --run-dir $RUN
-  python3 build_upload_zip.py --run-dir $RUN
-  python3 upload_batch.py --run-dir $RUN --batch-name tt_my_batch_20260526
-  python3 run_autolabel_matrix.py --run-dir $RUN
-  python3 export_version.py --run-dir $RUN --version <N>
+Gameplay window (IMG_0291): 45–180 сек (первые ~2.5 мин игры, без warmup).
+Стратифицированная выборка: 80 равных временных бинов, max 1 кадр/бин.
+Gameplay gate: --require-table-ball (мяч y>0.45 или скорость > порога).
 
-=== Sampling strategies ===
-  uniform   — равномерный stride по видео
-  missed    — кадры после детекции, где мяч пропущен (логика find_missed_balls)
-  low_conf  — детекции Ball в диапазоне conf [0.03, 0.25]
-  combined  — объединение всех стратегий (default)
+Player spatial rule (prelabel_yolo_seg.py):
+  train12 cls 2/3 игнорируется; Player1/Player2 по center_x vs split_x (сеть).
+  Дедуп IoU>0.5 на стороне, max 2 игрока на половину.
 
-=== Autolabel matrix ===
-  M1: model_type=roboflow, model=yolo-table-tennis/auto-label-lmrwb-instant-1
-  M2: model_type=foundational, model=sam3, ontology Ball/Net/Table/Player1/Player2
+Шаги run_video.sh:
+  1. sample 80 кадров из IMG_0291.MOV (45–180 сек, stratified+combined)
+  2. pre-label train12 -> YOLO seg polygons + Ball bbox (prelabel_yolo_seg.py)
+  3. zip images/ + labels/ (--format seg, без Ball)
+  4. upload вручную: upload_batch.py (после создания tt-seg-img0291 в UI)
 
-=== Артефакты run dir ===
-  images/              — sampled frames
-  labels/              — YOLO detection pre-labels
-  manifest.json        — metadata sampling
-  prelabel_report.json — stats pre-label
-  upload.zip           — zip для Roboflow
-  state.json           — task_id, batch_id, autolabel jobs
-  autolabel_matrix_report.json
+=== Формат labels (hybrid_seg, merged labels/) ===
+  0-4 seg: TableLeft, TableRight, Net, Player1, Player2 (polygon lines)
+  5 det:   Ball cx cy w h (5 values, local only; excluded from seg upload zip)
 
-=== Классы YOLO (detection) ===
+=== Классы Roboflow seg upload (5) ===
+  TableLeft, TableRight, Net, Player1, Player2
+
+=== Legacy det classes (pilot) ===
   0 Ball, 1 Net, 2 Player1, 3 Player2, 4 Table
+
+=== Autolabel matrix (M2 ontology — seg only, без Ball) ===
+  Net, TableLeft, TableRight, Player1, Player2
 
 === Troubleshooting ===
   - ROBOFLOW_API_KEY: проверить .env в корне проекта
-  - batch_id null после upload: открыть state.json, проверить upload_status; batch name в Roboflow UI
-  - autolabel требует batch_id в state.json (сначала upload_batch.py)
-  - Float32 координаты в prelabel_yolo_det.py (xyxy -> normalized bbox)
-
-=== Ручной review (human gate) ===
-  После upload и autolabel — проверка в app.roboflow.com:
-  Annotate -> batch -> сравнение pre-label / M1 / M2 -> approve -> Generate Version
+  - seg project tt-seg-img0291: создать в UI если upload вернул ошибку проекта
+  - batch_id null: скопировать из Roboflow UI Annotate tab в state.json
+  - Float32 координаты в prelabel_yolo_seg.py

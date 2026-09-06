@@ -9,7 +9,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from roboflow_client import autolabel_job_get, autolabel_start, find_project_root
+from roboflow_client import autolabel_job_get, autolabel_start, find_project_root, load_pipeline_config, resolve_run_dir
 
 
 def load_state(run_dir: Path) -> dict:
@@ -59,7 +59,9 @@ def run_matrix(run_dir: Path, cfg: dict, wait: bool = True) -> dict:
     if not batch_id:
         raise RuntimeError("batch_id отсутствует в state.json — сначала upload_batch.py")
 
-    project_id = cfg["project_id"]
+    project_id = cfg.get("seg_project_id") if cfg.get("label_mode") == "hybrid_seg" else cfg["project_id"]
+    if not project_id:
+        project_id = cfg["project_id"]
     matrix_cfg = cfg["autolabel_models"]
     results: dict = {"batch_id": batch_id, "jobs": {}}
 
@@ -92,12 +94,9 @@ def main() -> None:
     args = parser.parse_args()
 
     root = find_project_root()
-    cfg_path = root / "results" / "roboflow_pipeline" / "config" / "pipeline.json"
-    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    cfg = load_pipeline_config(root)
 
-    run_dir = Path(args.run_dir)
-    if not run_dir.is_absolute():
-        run_dir = root / "results" / "roboflow_pipeline" / run_dir
+    run_dir = resolve_run_dir(args.run_dir, root)
 
     results = run_matrix(run_dir, cfg, wait=not args.no_wait)
     report_path = run_dir / "autolabel_matrix_report.json"
