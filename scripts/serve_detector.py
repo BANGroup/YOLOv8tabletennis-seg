@@ -152,6 +152,7 @@ class SmartImpactDetector:
         self.detection_window_radius = 2
         self.pending_net_contact = None
         self.NET_PENDING_MAX_AGE = 2.0
+        self.NET_CROSS_CLEAR_PX = np.float32(80.0)
         self.pending_double_bounce = None
         self.last_reject_reason = None
         self.last_process_reject = None
@@ -528,9 +529,14 @@ class SmartImpactDetector:
         if current_side == 'unknown':
             return
         if current_side != fault_side:
+            bounce_pixel = impact_meta.get('bounce_pixel')
+            center_x = self.table_center_x or self.net_zone_x
+            if bounce_pixel is not None and center_x is not None:
+                if abs(float(bounce_pixel[0]) - float(center_x)) <= self.NET_CROSS_CLEAR_PX:
+                    return  # отскок у сетки, не сбрасывать
             self.pending_net_contact = None
             return
-        self._award_net_fault(fault_player, fps_time, frame_idx)
+        # Та же сторона — pending остаётся, очко только в конце розыгрыша
 
     def discard_stale_double_bounce(self, impact_meta):
         """Сбрасывает pending double bounce, если мяч перешёл на сторону соперника."""
@@ -699,7 +705,10 @@ class BallTracker:
         self.net_polygon = None      # Полигон маски сетки (Nx2)
         self.net_polygon_cv = None   # Тот же полигон в формате cv2 (Nx1x2 float32)
         self.net_axis = None         # Ось сетки (vx, vy, x0, y0) от cv2.fitLine
-        self.NET_IMPACT_MARGIN = np.float32(25.0)
+        self.NET_CONTACT_MARGIN = np.float32(8.0)
+        self.NET_LOST_MARGIN = np.float32(10.0)
+        self.NET_VX_REVERSE_MIN = np.float32(5.0)
+        self._prev_ball_dx = None
         self.debug_trace = [] if debug_trace else None
         
     def detect_ball(self, frame):
@@ -926,43 +935,36 @@ class BallTracker:
               f"bbox=[{x_min:.0f},{y_min:.0f},{x_max:.0f},{y_max:.0f}], "
               f"table_center_x: {old_center} -> {net_center_x:.0f}")
     
-    def is_ball_in_net_zone(self, ball_pos):
-        """Проверка: мяч в зоне сетки (по полигону с margin, иначе bbox)."""
-        if ball_pos is None:
-            return False
-        if self.net_polygon_cv is not None:
-            dist = cv2.pointPolygonTest(
-                self.net_polygon_cv,
-                (float(ball_pos[0]), float(ball_pos[1])),
-                True,
-            )
-            return dist >= np.float32(-40.0)
-        # Fallback на bbox-проверку, если полигон сетки ещё не найден
-        if self.net_bbox is None:
-            return False
-        x, y = ball_pos
-        x1, y1, x2, y2 = self.net_bbox
-        margin = 40
-        return (x1 - margin) <= x <= (x2 + margin) and y1 <= y <= y2
-
-    def is_impact_on_net(self, pos):
-        """Проверка: удар/контакт в зоне сетки (узкий margin для impact)."""
+    def _net_distance(self, pos):
+        """Расстояние до сетки: >=0 внутри, <0 снаружи (отрицательное = дальше от края)."""
         if pos is None:
-            return False
+            return None
         if self.net_polygon_cv is not None:
-            dist = cv2.pointPolygonTest(
+            return float(cv2.pointPolygonTest(
                 self.net_polygon_cv,
                 (float(pos[0]), float(pos[1])),
                 True,
-            )
-            return dist >= -self.NET_IMPACT_MARGIN
-        if self.net_bbox is None:
+            ))
+        if self.net_bbox is not None:
+            x, y = float(pos[0]), float(pos[1])
+            x1, y1, x2, y2 = self.net_bbox
+            nearest_x = min(max(x, float(x1)), float(x2))
+            nearest_y = min(max(y, float(y1)), float(y2))
+            if float(x1) <= x <= float(x2) and float(y1) <= y <= float(y2):
+                return 0.0
+            dist = math.sqrt((x - nearest_x) ** 2 + (y - nearest_y) ** 2)
+            return -dist
+        return None
+
+    def is_ball_in_net_zone(self, ball_pos):
+        """Проверка: мяч в зоне сетки (по полигону/bbox с NET_LOST_MARGIN)."""
+        if ball_pos is None:
             return False
-        x, y = pos
-        x1, y1, x2, y2 = self.net_bbox
-        margin = float(self.NET_IMPACT_MARGIN)
-        return (x1 - margin) <= x <= (x2 + margin) and y1 <= y <= y2
-    
+        dist = self._net_distance(ball_pos)
+        if dist is None:
+            return False
+        return dist >= -self.NET_LOST_MARGIN
+
     def is_ball_out_of_table(self, ball_pos):
         """Проверка: мяч за пределами стола?"""
         if self.table_polygon is None or ball_pos is None:
@@ -1001,14 +1003,34 @@ class BallTracker:
                 dy = detection[1] - last_pos[1]
                 speed = math.sqrt(dx*dx + dy*dy)
                 self.velocities.append(speed)
-                
+                curr_dx = np.float32(dx)
+
                 # Поддерживаем "последнюю известную" позицию/скорость для post-mortem
                 # анализа в _detect_rally_end_event (сетка/аут)
                 self.impact_detector.ball_lost_position = (float(detection[0]), float(detection[1]))
                 self.impact_detector.ball_lost_velocity = (float(dx), float(dy))
                 self.impact_detector.ball_lost_time = fps_time
                 self.impact_detector.ball_lost_frame = frame_idx
-                
+
+                # Касание сетки по траектории (разворот vx у полигона сетки)
+                net_dist = self._net_distance(detection)
+                if (net_dist is not None
+                        and net_dist >= -self.NET_CONTACT_MARGIN
+                        and self._prev_ball_dx is not None
+                        and self._prev_ball_dx * curr_dx < 0
+                        and abs(self._prev_ball_dx) >= self.NET_VX_REVERSE_MIN
+                        and abs(curr_dx) >= self.NET_VX_REVERSE_MIN
+                        and self.impact_detector.pending_net_contact is None):
+                    net_impact_meta = {
+                        'bounce_pixel': detection,
+                        'incoming_vector': (float(curr_dx), float(dy)),
+                    }
+                    self.impact_detector.register_net_contact(
+                        net_impact_meta, frame_idx, fps_time,
+                    )
+                    routed = 'net_contact'
+                self._prev_ball_dx = curr_dx
+
                 # Анализируем удар об стол
                 detect_impact_called = True
                 impact_meta = self.impact_detector.detect_impact(
@@ -1023,16 +1045,17 @@ class BallTracker:
                         bounce_frame = impact_meta['bounce_frame']
                     else:
                         bounce_frame = frame_idx
-                    if self.is_impact_on_net(impact_meta['bounce_pixel']):
-                        routed = 'net_contact'
-                        self.impact_detector.register_net_contact(impact_meta, bounce_frame, bounce_time)
-                    else:
-                        routed = 'process_detection'
-                        self.impact_detector.resolve_pending_net_contact(impact_meta, bounce_frame, bounce_time)
-                        self.impact_detector.discard_stale_double_bounce(impact_meta)
-                        self.impact_detector.process_detection(detection, frame_idx, fps_time, impact_meta)
-                        process_reject = self.impact_detector.last_process_reject
+                    routed = 'process_detection'
+                    self.impact_detector.resolve_pending_net_contact(
+                        impact_meta, bounce_frame, bounce_time,
+                    )
+                    self.impact_detector.discard_stale_double_bounce(impact_meta)
+                    self.impact_detector.process_detection(
+                        detection, frame_idx, fps_time, impact_meta,
+                    )
+                    process_reject = self.impact_detector.last_process_reject
         else:
+            self._prev_ball_dx = None
             self.missed_frames += 1
             
             # Если пропустили > 5 кадров - завершаем ралли
