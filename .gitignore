@@ -135,6 +135,16 @@ results/import_*_tmp/
 # Архивы загрузок/экспорта Roboflow (большие, восстановимы)
 *.zip
 
+# Учебные выгрузки в results/: не тащить вложенные репозитории, драйверы и сырые csv
+results/s6-lessons/.git/
+results/s6-lessons/plugins/
+results/s6-lessons/dialogs.csv
+results/s6-lessons/members.csv
+results/s6-lessons/**/members.csv
+results/sprint-9-sample-service/.git/
+results/sprint9-demo-service/.git/
+results/sprint9_cloud_project (2)/
+
 # ============================================
 # ИСКЛЮЧЕНИЕ: Старые мусорные папки
 # ============================================
