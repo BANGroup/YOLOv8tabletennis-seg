@@ -154,8 +154,59 @@ class SmartImpactDetector:
         self.NET_PENDING_MAX_AGE = 2.0
         self.NET_CROSS_CLEAR_PX = np.float32(80.0)
         self.pending_double_bounce = None
+        self.pending_out = None
         self.last_reject_reason = None
         self.last_process_reject = None
+
+        # === ОРИЕНТАЦИЯ ИГРОКОВ (YOLO class 2/3) ===
+        self.players_swapped = False
+        self.player_orientation_fixed = False
+        self.player_orientation_votes = deque(maxlen=15)
+        self.player_midpoint_votes = deque(maxlen=15)
+
+    def player_for_image_side(self, side):
+        """Сопоставление геометрической стороны кадра (left/right) номеру игрока."""
+        if side == 'left':
+            return 2 if self.players_swapped else 1
+        if side == 'right':
+            return 1 if self.players_swapped else 2
+        return 1
+
+    def image_side_for_player(self, player):
+        """Сторона кадра, где находится игрок с данным номером."""
+        if player == self.player_for_image_side('left'):
+            return 'left'
+        return 'right'
+
+    def note_player_orientation_vote(self, player1_x, player2_x):
+        """Голосование по положению Player1/Player2 на кадре (15 кадров, порог 12/15)."""
+        if self.player_orientation_fixed:
+            return
+        p1_x = np.float32(player1_x)
+        p2_x = np.float32(player2_x)
+        midpoint = np.float32((p1_x + p2_x) * np.float32(0.5))
+        swapped_vote = p1_x > p2_x
+        self.player_orientation_votes.append(swapped_vote)
+        self.player_midpoint_votes.append(midpoint)
+        if len(self.player_orientation_votes) < 15:
+            return
+        swapped_count = sum(1 for v in self.player_orientation_votes if v)
+        normal_count = 15 - swapped_count
+        if swapped_count >= 12:
+            self.players_swapped = True
+            self.player_orientation_fixed = True
+        elif normal_count >= 12:
+            self.players_swapped = False
+            self.player_orientation_fixed = True
+        else:
+            return
+        midpoints = np.array(self.player_midpoint_votes, dtype=np.float32)
+        fixed_center = np.float32(np.median(midpoints))
+        self.table_center_x = fixed_center
+        print(
+            f'Player orientation fixed: players_swapped={self.players_swapped}, '
+            f'table_mid_x={float(fixed_center):.1f}',
+        )
 
     def note_ball_detected(self, frame_idx):
         self.detected_frames.append(frame_idx)
@@ -333,14 +384,16 @@ class SmartImpactDetector:
             if not self.point_awarded_this_rally and len(self.last_rally_impacts) >= 2:
                 last_side = self.last_impact_side
                 if last_side and last_side != 'unknown':
-                    winner = 2 if last_side == 'left' else 1
-                    reason = f"P{1 if last_side == 'left' else 2} missed"
+                    fault = self.player_for_image_side(last_side)
+                    winner = 2 if fault == 1 else 1
+                    reason = f"P{fault} missed"
                     self.award_point(winner, reason=reason, event_time=fps_frame_time)
             
             # Сбрасываем для нового розыгрыша
             self.point_awarded_this_rally = False
             self.pending_net_contact = None
             self.pending_double_bounce = None
+            self.pending_out = None
             self.last_same_side_time = None
             self.consecutive_same_side = 1
         
@@ -401,11 +454,12 @@ class SmartImpactDetector:
                         self.consecutive_same_side += 1
                         if self.consecutive_same_side >= 2:
                             # Реальный двойной отскок (достаточный интервал)
+                            fault_p = self.player_for_image_side(current_side)
                             double_bounce = {
                                 'frame': impact_frame,
                                 'time': impact_time,
                                 'side': current_side,
-                                'player_fault': 1 if current_side == 'left' else 2,
+                                'player_fault': fault_p,
                                 'interval': time_since_last
                             }
                             self.double_bounce_events.append(double_bounce)
@@ -413,7 +467,7 @@ class SmartImpactDetector:
                             self.pending_double_bounce = {
                                 'time': impact_time,
                                 'frame': impact_frame,
-                                'fault_player': 1 if current_side == 'left' else 2,
+                                'fault_player': fault_p,
                             }
                     
                     self.last_same_side_time = fps_frame_time
@@ -429,11 +483,8 @@ class SmartImpactDetector:
                 self.serves.append(live_event)
                 self.serve_confidence.append(serve_signals)
                 # Определяем подающего по стороне первого удара
-                # left = Player 1, right = Player 2
-                if current_side == 'left':
-                    self.serving_player = 1
-                elif current_side == 'right':
-                    self.serving_player = 2
+                if current_side in ('left', 'right'):
+                    self.serving_player = self.player_for_image_side(current_side)
                 # Новый розыгрыш - сбрасываем
                 self.last_rally_impacts = [live_event]
                 self.consecutive_same_side = 1
@@ -504,10 +555,8 @@ class SmartImpactDetector:
         fault_player = None
         if self.last_rally_impacts:
             table_side = self.last_rally_impacts[-1].get('table_side', 'unknown')
-            if table_side == 'left':
-                fault_player = 1
-            elif table_side == 'right':
-                fault_player = 2
+            if table_side in ('left', 'right'):
+                fault_player = self.player_for_image_side(table_side)
         if fault_player is None:
             incoming_vec = impact_meta.get('incoming_vector', (0.0, 0.0))
             vx = float(incoming_vec[0])
@@ -525,7 +574,7 @@ class SmartImpactDetector:
             return
         fault_player = self.pending_net_contact['fault_player']
         current_side = impact_meta.get('table_side', 'unknown')
-        fault_side = 'left' if fault_player == 1 else 'right'
+        fault_side = self.image_side_for_player(fault_player)
         if current_side == 'unknown':
             return
         if current_side != fault_side:
@@ -545,8 +594,8 @@ class SmartImpactDetector:
         current_side = impact_meta.get('table_side', 'unknown')
         if current_side == 'unknown':
             return
-        fault_side = (
-            'left' if self.pending_double_bounce['fault_player'] == 1 else 'right'
+        fault_side = self.image_side_for_player(
+            self.pending_double_bounce['fault_player']
         )
         if current_side != fault_side:
             self.pending_double_bounce = None
@@ -583,12 +632,13 @@ class SmartImpactDetector:
         """Определяет виновника по последнему зарегистрированному отскоку."""
         if self.last_rally_impacts:
             table_side = self.last_rally_impacts[-1].get('table_side', 'unknown')
-            if table_side == 'left':
-                return 1
-            if table_side == 'right':
-                return 2
+            if table_side in ('left', 'right'):
+                return self.player_for_image_side(table_side)
         if last_pos is not None and center_x is not None:
-            return 1 if last_pos[0] > center_x else 2
+            fault = 1 if last_pos[0] > center_x else 2
+            if self.players_swapped:
+                fault = 2 if fault == 1 else 1
+            return fault
         return 1
 
     def award_point(self, winner_player, reason="", event_time=None):
@@ -711,6 +761,21 @@ class BallTracker:
         self._prev_ball_dx = None
         self.debug_trace = [] if debug_trace else None
         
+    def _best_detection_center_for_class(self, class_ids, boxes, confs, class_id):
+        best_center = None
+        best_conf = -1.0
+        for idx, cls_id in enumerate(class_ids):
+            if cls_id != class_id:
+                continue
+            x1, y1, x2, y2 = boxes[idx]
+            cx = np.float32((x1 + x2) / 2.0)
+            cy = np.float32((y1 + y2) / 2.0)
+            c = float(confs[idx]) if confs is not None else 1.0
+            if c > best_conf:
+                best_conf = c
+                best_center = (cx, cy)
+        return best_center
+
     def detect_ball(self, frame):
         results = self.model.predict(frame, conf=0.1, verbose=False)
         result = results[0]
@@ -724,6 +789,16 @@ class BallTracker:
         boxes = result.boxes.xyxy.cpu().numpy()
         confs = (result.boxes.conf.cpu().numpy()
                  if getattr(result.boxes, 'conf', None) is not None else None)
+
+        p1_center = self._best_detection_center_for_class(class_ids, boxes, confs, 2)
+        p2_center = self._best_detection_center_for_class(class_ids, boxes, confs, 3)
+        if p1_center is not None and p2_center is not None:
+            was_fixed = self.impact_detector.player_orientation_fixed
+            self.impact_detector.note_player_orientation_vote(
+                float(p1_center[0]), float(p2_center[0]),
+            )
+            if self.impact_detector.player_orientation_fixed and not was_fixed:
+                self.table_center_x = self.impact_detector.table_center_x
         
         # Из всех детекций мяча оставляем самую уверенную в зоне игры.
         # Это убирает ложные срабатывания на пылесосе, кружках, тенях и
@@ -790,6 +865,12 @@ class BallTracker:
                 right_poly = table_polys[-1][1]
             elif len(table_polys) == 1:
                 left_poly = table_polys[0][1]
+        
+        # Два класса (TableLeft/TableRight): не фиксируем стол, пока на кадре
+        # нет обеих половин — иначе hull по одной половине даёт неверный контур.
+        if len(self.table_class_ids) >= 2:
+            if left_poly is None or right_poly is None:
+                return
         
         if left_poly is None and right_poly is None:
             return
@@ -863,14 +944,9 @@ class BallTracker:
     
     def _maybe_update_net(self, result):
         """Детекция сетки через СЕГМЕНТАЦИЮ (как стол), один раз.
-        Из маски берём:
-          - net_polygon (контур маски, для pointPolygonTest),
-          - net_bbox (на всякий случай, для совместимости),
-          - net_center_x (медиана X маски) — это и есть реальная
-            середина стола, которой делим P1 / P2.
-        Если сетка задетектирована — переопределяем
-        impact_detector.table_center_x значением от сетки
-        (приоритетнее, чем середина bbox стола).
+        Из маски берём net_polygon, net_bbox, net_zone_x (медиана X маски).
+        table_center_x для left/right не меняем — только bbox стола и
+        фиксация по игрокам (class 2/3).
         """
         if self.net_polygon is not None:
             return
@@ -923,17 +999,9 @@ class BallTracker:
         # чем (x_min+x_max)/2). Это и есть реальная середина стола.
         net_center_x = float(np.median(net_polygon[:, 0]))
         self.impact_detector.net_zone_x = net_center_x
-        
-        # Сетка делит стол пополам — переопределяем center_x от сетки.
-        # Это влияет ТОЛЬКО на распределение left/right (P1/P2)
-        # в последующих ударах; уже зафиксированные удары не трогаем.
-        old_center = self.impact_detector.table_center_x
-        self.impact_detector.table_center_x = net_center_x
-        self.table_center_x = net_center_x
-        
+
         print(f"[+] Net (segmentation): center_x={net_center_x:.0f}, "
-              f"bbox=[{x_min:.0f},{y_min:.0f},{x_max:.0f},{y_max:.0f}], "
-              f"table_center_x: {old_center} -> {net_center_x:.0f}")
+              f"bbox=[{x_min:.0f},{y_min:.0f},{x_max:.0f},{y_max:.0f}]")
     
     def _net_distance(self, pos):
         """Расстояние до сетки: >=0 внутри, <0 снаружи (отрицательное = дальше от края)."""
@@ -989,6 +1057,8 @@ class BallTracker:
         if detection:
             self.total_detections += 1
             self.missed_frames = 0
+            if self.impact_detector.pending_out is not None:
+                self.impact_detector.pending_out = None
             self.impact_detector.note_ball_detected(frame_idx)
             self.kalman.update(detection)
             self.trajectory.append(detection)
@@ -1070,6 +1140,7 @@ class BallTracker:
                 # известная позиция мяча была явно за полигоном стола —
                 # это аут. Используем уже существующий метод is_ball_out_of_table.
                 if (not self.impact_detector.point_awarded_this_rally
+                        and self.impact_detector.pending_out is None
                         and len(self.impact_detector.last_rally_impacts) >= 1
                         and self.impact_detector.ball_lost_position is not None
                         and self.is_ball_out_of_table(self.impact_detector.ball_lost_position)):
@@ -1078,29 +1149,53 @@ class BallTracker:
                                 or self.impact_detector.net_zone_x
                                 or (self.frame_width / 2))
                     fault = self.impact_detector._fault_player_from_last_bounce(last_pos, center_x)
-                    winner = 2 if fault == 1 else 1
-                    self.impact_detector.award_point(
-                        winner, reason=f"P{fault} out (off-table)", event_time=fps_time,
-                    )
-                    self.impact_detector.out_events.append({
-                        'time': fps_time, 'player_fault': fault,
-                        'frame': frame_idx, 'position': last_pos, 'type': 'off_table'
-                    })
-                    self.impact_detector.point_awarded_this_rally = True
-                    self.impact_detector.pending_double_bounce = None
+                    self.impact_detector.pending_out = {
+                        'armed_time': fps_time,
+                        'event_time': fps_time,
+                        'frame': frame_idx,
+                        'position': last_pos,
+                        'fault_player': fault,
+                        'type': 'off_table',
+                        'reason': f"P{fault} out (off-table)",
+                    }
 
                 if (not self.impact_detector.point_awarded_this_rally
+                        and self.impact_detector.pending_out is None
                         and self.impact_detector.pending_double_bounce is not None):
                     self.impact_detector._award_deferred_double_bounce()
-                
-                rally_finalized = self.impact_detector.finalize_rally(frame_idx, fps_time)
-                
-                # Чистим визуальную траекторию по концу розыгрыша,
-                # чтобы экран не зарастал линиями. Логику не трогаем —
-                # impact_detector сам знает свой last_rally_impacts.
-                if rally_finalized or self.impact_detector.rally_start is None:
-                    self.trajectory.clear()
-                    self.velocities.clear()
+
+                pending_out = self.impact_detector.pending_out
+                if (pending_out is not None
+                        and not self.impact_detector.point_awarded_this_rally):
+                    elapsed = fps_time - pending_out['armed_time']
+                    if elapsed >= self.impact_detector.out_confirmation_time:
+                        winner = 2 if pending_out['fault_player'] == 1 else 1
+                        self.impact_detector.award_point(
+                            winner,
+                            reason=pending_out['reason'],
+                            event_time=pending_out['event_time'],
+                        )
+                        self.impact_detector.out_events.append({
+                            'time': pending_out['event_time'],
+                            'player_fault': pending_out['fault_player'],
+                            'frame': pending_out['frame'],
+                            'position': pending_out['position'],
+                            'type': pending_out['type'],
+                        })
+                        self.impact_detector.point_awarded_this_rally = True
+                        self.impact_detector.pending_double_bounce = None
+                        self.impact_detector.pending_out = None
+
+                if (self.impact_detector.pending_out is None
+                        or self.impact_detector.point_awarded_this_rally):
+                    rally_finalized = self.impact_detector.finalize_rally(frame_idx, fps_time)
+
+                    # Чистим визуальную траекторию по концу розыгрыша,
+                    # чтобы экран не зарастал линиями. Логику не трогаем —
+                    # impact_detector сам знает свой last_rally_impacts.
+                    if rally_finalized or self.impact_detector.rally_start is None:
+                        self.trajectory.clear()
+                        self.velocities.clear()
             
             if self.kalman.initialized:
                 pred = self.kalman.predict()
@@ -1148,6 +1243,7 @@ class BallTracker:
         if self.impact_detector.point_awarded_this_rally:
             self.impact_detector.pending_net_contact = None
             self.impact_detector.pending_double_bounce = None
+            self.impact_detector.pending_out = None
             return  # Очко уже присуждено
 
         pending = self.impact_detector.pending_net_contact
@@ -1157,6 +1253,7 @@ class BallTracker:
                 fault_player = pending['fault_player']
                 self.impact_detector._award_net_fault(fault_player, fps_time, frame_idx)
                 self.impact_detector.pending_double_bounce = None
+                self.impact_detector.pending_out = None
                 return
             self.impact_detector.pending_net_contact = None
 
@@ -1193,14 +1290,16 @@ class BallTracker:
         if in_net_zone:
             last_impact = self.impact_detector.last_rally_impacts[-1]
             table_side = last_impact.get('table_side', 'unknown')
-            if table_side == 'left':
-                fault_player = 1
-            elif table_side == 'right':
-                fault_player = 2
+            id_ = self.impact_detector
+            if table_side in ('left', 'right'):
+                fault_player = id_.player_for_image_side(table_side)
             else:
                 fault_player = 1 if last_pos[0] < center_x else 2
+                if id_.players_swapped:
+                    fault_player = 2 if fault_player == 1 else 1
             self.impact_detector._award_net_fault(fault_player, fps_time, frame_idx)
             self.impact_detector.pending_double_bounce = None
+            self.impact_detector.pending_out = None
             return
 
         if last_vel is not None:
@@ -1213,15 +1312,17 @@ class BallTracker:
             is_horizontal_motion = horizontal_speed > abs(vy)
             
             if far_from_center and horizontal_speed > 10 and is_horizontal_motion:
-                fault = self.impact_detector._fault_player_from_last_bounce(last_pos, center_x)
-                winner = 2 if fault == 1 else 1
-                self.impact_detector.award_point(winner, reason=f"P{fault} out", event_time=fps_time)
-                self.impact_detector.out_events.append({
-                    'time': fps_time, 'player_fault': fault,
-                    'frame': frame_idx, 'position': last_pos, 'type': 'long'
-                })
-                self.impact_detector.point_awarded_this_rally = True
-                self.impact_detector.pending_double_bounce = None
+                if self.impact_detector.pending_out is None:
+                    fault = self.impact_detector._fault_player_from_last_bounce(last_pos, center_x)
+                    self.impact_detector.pending_out = {
+                        'armed_time': fps_time,
+                        'event_time': fps_time,
+                        'frame': frame_idx,
+                        'position': last_pos,
+                        'fault_player': fault,
+                        'type': 'long',
+                        'reason': f"P{fault} out",
+                    }
                 return
     
     def draw_tracking(self, frame, detection):
@@ -1297,9 +1398,12 @@ class BallTracker:
                              (120, 120, 255), 2)
                     label_x_left = max(min(nx1, nx2) - 60, 5)
                     label_x_right = max(nx1, nx2) + 20
-                    cv2.putText(annotated, "P1", (label_x_left, table_y_min + 25),
+                    swapped = self.impact_detector.players_swapped
+                    left_label = "P2" if swapped else "P1"
+                    right_label = "P1" if swapped else "P2"
+                    cv2.putText(annotated, left_label, (label_x_left, table_y_min + 25),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (120, 120, 255), 2)
-                    cv2.putText(annotated, "P2", (label_x_right, table_y_min + 25),
+                    cv2.putText(annotated, right_label, (label_x_right, table_y_min + 25),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (120, 120, 255), 2)
             else:
                 center_x = self.impact_detector.table_center_x
@@ -1307,9 +1411,12 @@ class BallTracker:
                     cx = int(center_x)
                     cv2.line(annotated, (cx, table_y_min), (cx, table_y_max),
                              (120, 120, 255), 2)
-                    cv2.putText(annotated, "P1", (max(cx - 60, 5), table_y_min + 25),
+                    swapped = self.impact_detector.players_swapped
+                    left_label = "P2" if swapped else "P1"
+                    right_label = "P1" if swapped else "P2"
+                    cv2.putText(annotated, left_label, (max(cx - 60, 5), table_y_min + 25),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (120, 120, 255), 2)
-                    cv2.putText(annotated, "P2", (cx + 20, table_y_min + 25),
+                    cv2.putText(annotated, right_label, (cx + 20, table_y_min + 25),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (120, 120, 255), 2)
         
         # СТАТИСТИКА
@@ -1377,9 +1484,13 @@ class BallTracker:
         frame_h = annotated.shape[0]
         score1 = self.impact_detector.score_player1
         score2 = self.impact_detector.score_player2
+        swapped = self.impact_detector.players_swapped
         
-        # Большой счёт по центру сверху
-        score_text = f"{score1} : {score2}"
+        # Большой счёт по центру сверху (число с той стороны кадра, где игрок)
+        if swapped:
+            score_text = f"{score2} : {score1}"
+        else:
+            score_text = f"{score1} : {score2}"
         score_size = cv2.getTextSize(score_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 3)[0]
         score_x = (frame_w - score_size[0]) // 2
         
@@ -1389,13 +1500,17 @@ class BallTracker:
         cv2.putText(annotated, score_text, (score_x, 40), 
                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 3)
         
-        # Имена игроков под счётом
-        p1_text = "P1"
-        p2_text = "P2"
-        cv2.putText(annotated, p1_text, (score_x - 5, 65), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
-        cv2.putText(annotated, p2_text, (score_x + score_size[0] - 15, 65), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
+        # Имена игроков под счётом (слева/справа по положению на кадре)
+        if swapped:
+            left_name, right_name = "P2", "P1"
+            left_color, right_color = (255, 255, 0), (0, 255, 255)
+        else:
+            left_name, right_name = "P1", "P2"
+            left_color, right_color = (0, 255, 255), (255, 255, 0)
+        cv2.putText(annotated, left_name, (score_x - 5, 65),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, left_color, 2)
+        cv2.putText(annotated, right_name, (score_x + score_size[0] - 15, 65),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, right_color, 2)
         
         # === ПОДАЧА ИГРОКА (правый верхний угол) ===
         serving = self.impact_detector.serving_player
@@ -1590,7 +1705,8 @@ def main():
     for i, serve in enumerate(tracker.impact_detector.serves):
         conf = tracker.impact_detector.serve_confidence[i] if i < len(tracker.impact_detector.serve_confidence) else 0
         toss = "✓" if serve.get('toss_detected') else "✗"
-        player = 1 if serve['table_side'] == 'left' else 2
+        side = serve.get('table_side', 'unknown')
+        player = tracker.impact_detector.player_for_image_side(side) if side in ('left', 'right') else 1
         print(f"      └─ Подача {i+1}: Player {player}, t={serve['time']:.2f}s, уверенность={conf}/3, подброс={toss}")
     
     # Двойные отскоки
