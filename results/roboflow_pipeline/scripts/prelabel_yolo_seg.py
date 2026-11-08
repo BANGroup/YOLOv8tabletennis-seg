@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -176,14 +178,68 @@ def _dedupe_players_same_side(
     return kept
 
 
-def _assign_player_seg_cls(xyxy: np.ndarray, split_x: float) -> int:
-    center_x = (float(xyxy[0]) + float(xyxy[2])) / 2.0
-    return SEG_PLAYER1 if center_x < split_x else SEG_PLAYER2
+def _assign_player_side(center_x: float, split_x: float, p1_cls: int, p2_cls: int, players_swapped: bool) -> int:
+    on_left = center_x < split_x
+    if players_swapped:
+        return p2_cls if on_left else p1_cls
+    return p1_cls if on_left else p2_cls
 
 
-def _assign_player_rfv2_cls(xyxy: np.ndarray, split_x: float) -> int:
+def _assign_player_seg_cls(xyxy: np.ndarray, split_x: float, players_swapped: bool = False) -> int:
     center_x = (float(xyxy[0]) + float(xyxy[2])) / 2.0
-    return RFV2_PLAYER1 if center_x < split_x else RFV2_PLAYER2
+    return _assign_player_side(center_x, split_x, SEG_PLAYER1, SEG_PLAYER2, players_swapped)
+
+
+def _assign_player_rfv2_cls(xyxy: np.ndarray, split_x: float, players_swapped: bool = False) -> int:
+    center_x = (float(xyxy[0]) + float(xyxy[2])) / 2.0
+    return _assign_player_side(center_x, split_x, RFV2_PLAYER1, RFV2_PLAYER2, players_swapped)
+
+
+_NAMED_FRAME_RE = re.compile(r"^(?P<video>.+)_f(?P<idx>\d+)")
+_LEGACY_FRAME_RE = re.compile(r"^frame_(?P<idx>\d+)")
+
+
+def _video_id_from_image_name(name: str) -> str | None:
+    base = Path(name).name
+    if _LEGACY_FRAME_RE.match(base):
+        return "IMG_0291"
+    named = _NAMED_FRAME_RE.match(base)
+    if named:
+        return named.group("video")
+    upper = base.upper()
+    for token in ("IMG_1043", "IMG_0973", "IMG_0291"):
+        if upper.startswith(token):
+            return token
+    return None
+
+
+def _load_split_config(root: Path | None = None) -> dict:
+    root = root or find_project_root()
+    rel = "config/data_split.json"
+    pipe_path = root / "results" / "roboflow_pipeline" / "config" / "pipeline.json"
+    if pipe_path.is_file():
+        try:
+            pipe = json.loads(pipe_path.read_text(encoding="utf-8"))
+            rel = str(pipe.get("data_split_config") or rel)
+        except json.JSONDecodeError:
+            pass
+    path = Path(rel)
+    if not path.is_absolute():
+        path = root / path
+    if not path.is_file():
+        return {"videos": []}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _players_swapped_for_image(name: str, override: bool | None, split_cfg: dict) -> bool:
+    """CLI override либо players_swapped из data_split.json (IMG_1043 -> True)."""
+    if override is not None:
+        return bool(override)
+    video_id = _video_id_from_image_name(name)
+    for video in split_cfg.get("videos", []):
+        if video.get("video_id") == video_id:
+            return bool(video.get("players_swapped", False))
+    return video_id == "IMG_1043"
 
 
 def _select_players_spatial(
@@ -227,7 +283,9 @@ def prelabel_images(
     labels_dir: Path,
     model_path: Path,
     conf: float = 0.03,
-    class_layout: str = "hybrid_seg",
+    class_layout: str = "roboflow_v2",
+    players_swapped: bool | None = None,
+    split_config: dict | None = None,
 ) -> dict:
     images_dir = Path(images_dir)
     labels_dir = Path(labels_dir)
@@ -235,6 +293,8 @@ def prelabel_images(
     use_rfv2 = class_layout == "roboflow_v2"
 
     model = YOLO(str(model_path))
+    native_dual_table = len(getattr(model, "names", {}) or {}) >= 6
+    split_cfg = split_config if split_config is not None else _load_split_config()
     image_paths = sorted(
         p for p in images_dir.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png"}
     )
@@ -248,6 +308,7 @@ def prelabel_images(
         "ball_boxes": 0,
         "ball_polygons": 0,
         "table_splits": 0,
+        "native_table_polygons": 0,
         "by_class": {name: 0 for name in class_names},
         "files": [],
     }
@@ -257,15 +318,25 @@ def prelabel_images(
         h, w = results.orig_shape
         lines: list[str] = []
         net_boxes: list[np.ndarray] = []
+        swapped = _players_swapped_for_image(img_path.name, players_swapped, split_cfg)
 
         if results.boxes is None or len(results.boxes) == 0:
             label_path = labels_dir / f"{img_path.stem}.txt"
             label_path.write_text("", encoding="utf-8")
             stats["images"] += 1
-            stats["files"].append({"image": str(img_path), "label": str(label_path), "lines": 0})
+            stats["files"].append(
+                {
+                    "image": str(img_path),
+                    "label": str(label_path),
+                    "lines": 0,
+                    "players_swapped": swapped,
+                }
+            )
             continue
 
         table_polys: list[np.ndarray] = []
+        direct_left: list[np.ndarray] = []
+        direct_right: list[np.ndarray] = []
         raw_players: list[tuple[np.ndarray, np.ndarray]] = []
         deferred_seg: list[tuple[int, np.ndarray]] = []
 
@@ -292,7 +363,16 @@ def prelabel_images(
                 deferred_seg.append((net_cls, poly))
                 continue
 
-            if cls_id == TRAIN12_TABLE:
+            # train14: TableLeft/TableRight уже отдельные классы — полигон берём как есть.
+            if native_dual_table and cls_id == RFV2_TABLE_LEFT:
+                direct_left.append(extract_instance_poly(results, idx, w, h))
+                continue
+            if native_dual_table and cls_id == RFV2_TABLE_RIGHT:
+                direct_right.append(extract_instance_poly(results, idx, w, h))
+                continue
+
+            # train12: один класс Table, режется по split_x.
+            if (not native_dual_table) and cls_id == TRAIN12_TABLE:
                 table_polys.append(extract_instance_poly(results, idx, w, h))
                 continue
 
@@ -301,7 +381,7 @@ def prelabel_images(
                 raw_players.append((xyxy, poly))
                 continue
 
-            seg_cls = TRAIN12_TO_SEG.get(cls_id)
+            seg_cls = None if native_dual_table else TRAIN12_TO_SEG.get(cls_id)
             if seg_cls is None:
                 continue
             poly = extract_instance_poly(results, idx, w, h)
@@ -310,16 +390,25 @@ def prelabel_images(
         split_x = resolve_split_x(net_boxes, w)
         tl_cls = RFV2_TABLE_LEFT if use_rfv2 else SEG_TABLE_LEFT
         tr_cls = RFV2_TABLE_RIGHT if use_rfv2 else SEG_TABLE_RIGHT
+
+        def _emit_poly(cls_out: int, poly: np.ndarray, class_name: str) -> None:
+            lines.append(poly_to_yolo_seg(cls_out, poly, w, h))
+            stats["seg_polygons"] += 1
+            stats["by_class"][class_name] += 1
+
+        for poly in direct_left:
+            _emit_poly(tl_cls, poly, "TableLeft")
+            stats["native_table_polygons"] += 1
+        for poly in direct_right:
+            _emit_poly(tr_cls, poly, "TableRight")
+            stats["native_table_polygons"] += 1
+
         for table_poly in table_polys:
             left, right = split_table_polygon(table_poly, split_x, w, h)
             if left is not None:
-                lines.append(poly_to_yolo_seg(tl_cls, left, w, h))
-                stats["seg_polygons"] += 1
-                stats["by_class"]["TableLeft"] += 1
+                _emit_poly(tl_cls, left, "TableLeft")
             if right is not None:
-                lines.append(poly_to_yolo_seg(tr_cls, right, w, h))
-                stats["seg_polygons"] += 1
-                stats["by_class"]["TableRight"] += 1
+                _emit_poly(tr_cls, right, "TableRight")
             if left is not None or right is not None:
                 stats["table_splits"] += 1
 
@@ -330,31 +419,43 @@ def prelabel_images(
             stats["by_class"][cls_name] += 1
 
         if use_rfv2:
-            for seg_cls, poly in _select_players_spatial(
-                raw_players,
-                split_x,
-                assign_cls=_assign_player_rfv2_cls,
-                p1_cls=RFV2_PLAYER1,
-                p2_cls=RFV2_PLAYER2,
-            ):
-                lines.append(poly_to_yolo_seg(seg_cls, poly, w, h))
-                stats["seg_polygons"] += 1
-                stats["by_class"][RFV2_CLASS_NAMES[seg_cls]] += 1
+            assign_cls = functools.partial(_assign_player_rfv2_cls, players_swapped=swapped)
+            player_names = RFV2_CLASS_NAMES
+            p1_cls, p2_cls = RFV2_PLAYER1, RFV2_PLAYER2
         else:
-            for seg_cls, poly in _select_players_spatial(raw_players, split_x):
-                lines.append(poly_to_yolo_seg(seg_cls, poly, w, h))
-                stats["seg_polygons"] += 1
-                stats["by_class"][SEG_CLASS_NAMES[seg_cls]] += 1
+            assign_cls = functools.partial(_assign_player_seg_cls, players_swapped=swapped)
+            player_names = SEG_CLASS_NAMES
+            p1_cls, p2_cls = SEG_PLAYER1, SEG_PLAYER2
+        for seg_cls, poly in _select_players_spatial(
+            raw_players,
+            split_x,
+            assign_cls=assign_cls,
+            p1_cls=p1_cls,
+            p2_cls=p2_cls,
+        ):
+            lines.append(poly_to_yolo_seg(seg_cls, poly, w, h))
+            stats["seg_polygons"] += 1
+            stats["by_class"][player_names[seg_cls]] += 1
 
         label_path = labels_dir / f"{img_path.stem}.txt"
         label_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
         stats["images"] += 1
-        stats["files"].append({"image": str(img_path), "label": str(label_path), "lines": len(lines)})
+        stats["files"].append(
+            {
+                "image": str(img_path),
+                "label": str(label_path),
+                "lines": len(lines),
+                "players_swapped": swapped,
+            }
+        )
 
     fmt = "roboflow_v2" if use_rfv2 else "hybrid_seg"
     report = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "model": str(model_path),
+        "model_num_classes": len(getattr(model, "names", {}) or {}),
+        "native_dual_table": native_dual_table,
+        "players_swapped_override": players_swapped,
         "format": fmt,
         "class_layout": class_layout,
         "format_notes": {
@@ -377,7 +478,9 @@ def prelabel_images(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Pre-label images with train12 seg polygons + Ball bbox")
+    parser = argparse.ArgumentParser(
+        description="Pre-label images with train12 (5 cls, split table) or train14 (6 cls, native halves)"
+    )
     parser.add_argument("--run-dir", type=str, required=True, help="runs/<batch>")
     parser.add_argument("--images", type=str, default=None, help="override images dir")
     parser.add_argument("--labels", type=str, default=None, help="override labels dir")
@@ -386,8 +489,14 @@ def main() -> None:
     parser.add_argument(
         "--class-layout",
         choices=["hybrid_seg", "roboflow_v2"],
-        default="hybrid_seg",
-        help="hybrid_seg: local 0-4 seg + Ball bbox cls5; roboflow_v2: 6-class polygons for tt-seg-img0291 v2",
+        default="roboflow_v2",
+        help="roboflow_v2: 6 polygon classes; hybrid_seg: local 0-4 seg + Ball bbox cls5",
+    )
+    parser.add_argument(
+        "--players-swapped",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Левая сторона кадра = Player2. По умолчанию авто по имени файла и config/data_split.json",
     )
     args = parser.parse_args()
 
@@ -399,7 +508,14 @@ def main() -> None:
     labels_dir = Path(args.labels) if args.labels else run_dir / "labels"
     model_path = Path(args.model) if args.model else root / cfg["local_model"]
 
-    report = prelabel_images(images_dir, labels_dir, model_path, args.conf, args.class_layout)
+    report = prelabel_images(
+        images_dir,
+        labels_dir,
+        model_path,
+        args.conf,
+        args.class_layout,
+        players_swapped=args.players_swapped,
+    )
     report_path = run_dir / "prelabel_report.json"
     report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     ball_info = (

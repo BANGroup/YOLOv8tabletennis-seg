@@ -1,0 +1,77 @@
+{
+  "video_id": "GX010138",
+  "camera": "GoPro HERO (HEVC bt709)",
+  "camera_angle": "side_wide_gopro",
+  "players_swapped": false,
+  "resolution": "1920x1080",
+  "fps": 59.94,
+  "duration_sec": 1406.2,
+  "color_profile": "bt709 (SDR yuvj420p)",
+  "files": {
+    "raw": {
+      "path": "/mnt/nas-drive/CV/tabletennis/videos/GX010138/raw/GX010138.MP4",
+      "size_bytes": 720234930,
+      "ffprobe": {
+        "codec_name": "hevc",
+        "width": 1920,
+        "height": 1080,
+        "pix_fmt": "yuvj420p",
+        "color_transfer": "bt709",
+        "nb_frames": "84286",
+        "duration": "1406.171433"
+      }
+    },
+    "sdr": null,
+    "clips": [
+      {
+        "clip_id": "GX010138_10min_raw",
+        "path": "/mnt/nas-drive/CV/tabletennis/videos/GX010138/clips/GX010138_10min_raw.mp4",
+        "size_bytes": 800063436,
+        "ffprobe": {
+          "codec_name": "mpeg4",
+          "width": 1920,
+          "height": 1080,
+          "pix_fmt": "yuv420p",
+          "color_transfer": null,
+          "nb_frames": "35964",
+          "duration": "600.000000"
+        }
+      },
+      {
+        "clip_id": "GX010138_cut_best_period",
+        "path": "/mnt/nas-drive/CV/tabletennis/videos/GX010138/clips/GX010138_cut_best_period.mp4",
+        "size_bytes": 235798287,
+        "ffprobe": {
+          "codec_name": "hevc",
+          "width": 1920,
+          "height": 1080,
+          "pix_fmt": "yuvj420p",
+          "color_transfer": "bt709",
+          "nb_frames": "29234",
+          "duration": "487.720567"
+        }
+      }
+    ]
+  },
+  "windows": [
+    {
+      "window_id": "GX010138_train",
+      "start_sec": 0,
+      "end_sec": 1000,
+      "role": "train_candidates",
+      "dataset_split": "train",
+      "serve_order_errors": null,
+      "expected_spec": null
+    },
+    {
+      "window_id": "GX010138_test",
+      "start_sec": 1000,
+      "end_sec": 1406,
+      "role": "test",
+      "dataset_split": "test",
+      "serve_order_errors": null,
+      "expected_spec": null
+    }
+  ],
+  "updated_at": "2026-11-08T20:18:38+05:00"
+}

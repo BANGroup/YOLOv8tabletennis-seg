@@ -1,0 +1,37 @@
+# Эталонная спецификация проверки: IMG_1043_sdr (полный прогон 0–1313 с, торцевой ракурс)
+spec_id: IMG_1043_full
+video: sources/IMG_1043_sdr.mp4
+segment:
+  start_sec: 0
+  end_sec: 1313
+role: test
+model_path: runs/segment/train14_ttseg_v3/weights/best.pt
+reference_artifact: results/serve_detector_train14_img1043_sdr_both/smart_impacts_analysis.json
+reference_stdout: results/serve_detector_train14_img1043_sdr_both/run_stdout.log
+updated_at: "2026-11-08"
+
+checks:
+  total_detections:
+    min: 50000
+    baseline: 53189
+  smart_impacts:
+    min: 450
+    max: 550
+    baseline: 500
+  score:
+    player1:
+      min: 40
+      max: 75
+      baseline: 55
+    player2:
+      min: 75
+      max: 115
+      baseline: 94
+  score_balance:
+    min_lesser_side_share: 0.25
+    note: "Защита от регрессии 144:3 / 146:1 (когда маска стола или сетки сваливает все очки в одну сторону)"
+
+stdout_required_substrings:
+  - "Left table polygon:"
+  - "Right table polygon:"
+  - "players_swapped=True"

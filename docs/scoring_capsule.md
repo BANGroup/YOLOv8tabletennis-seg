@@ -6,8 +6,8 @@
 
 ## Invariants (≤12)
 
-1. **Player 1 = левая сторона** (X < center_x) — SSoT: `scripts/serve_detector.py` (`table_side`)
-2. **Player 2 = правая сторона** (X >= center_x) — SSoT: `scripts/serve_detector.py`
+1. **Игроки P1 / P2 по классам модели (2 и 3)** — голосованием по первым 15 кадрам, где видны оба игрока (порог 12/15), фиксируется `players_swapped` и медиана `table_center_x` между ними; через `player_for_image_side(side)` `left`/`right` переводятся в номер игрока (SSoT: `scripts/serve_detector.py`)
+2. **Геометрия стороны (`table_side`)** — `left` (X < `table_center_x`) / `right` (X >= `table_center_x`); маска сетки `table_center_x` не перезаписывает — SSoT: `scripts/serve_detector.py`
 3. **Смена подачи каждые 2 очка** — SSoT: `serve_change_interval`, `points_since_serve_change`
 4. **Подача = пауза > 2.5 сек + подброс + удар на своей стороне** — SSoT: `serve_pause_threshold = 2.5`
 5. **Двойной отскок = 2+ удара на одной стороне, интервал >= 0.6 сек** — SSoT: `min_double_bounce_interval`, `prev_impact_time`
@@ -17,7 +17,7 @@
 9. **Timeout pending net** — `NET_PENDING_MAX_AGE = 2.0` с, затем `_award_net_fault()` — SSoT: `_detect_rally_end_event()`
 10. **Виновник сетки/аута** — сторона последнего отскока (`last_rally_impacts[-1].table_side`), fallback X — SSoT: `_fault_player_from_last_bounce()`, `_award_net_fault()`
 11. **`pending_net_contact` / `pending_double_bounce` очищаются** при новом розыгрыше и ранних выходах — SSoT: `process_detection()`, `_detect_rally_end_event()`
-12. **Аут = мяч далеко от центра + горизонтальная скорость > 10** — SSoT: `_detect_rally_end_event()`; off-table fallback — `is_ball_out_of_table()`
+12. **Аут = отложенное окно 0.4 с (`pending_out`)** — мяч за пределами стола + горизонтальная скорость > 10; если за 0.4 с мяч не вернулся на стол, очко начисляется сопернику игрока последнего отскока (`_fault_player_from_last_bounce()`) — SSoT: `scripts/serve_detector.py`
 
 ## Decisions (≤7)
 

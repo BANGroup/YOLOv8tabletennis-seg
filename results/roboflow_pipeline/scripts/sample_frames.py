@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -137,6 +138,7 @@ def _collect_reasons(
     low_max: float,
     missed_max: int,
     frame_idx: int,
+    missing_table_half: bool = False,
 ) -> list[str]:
     reasons: list[str] = []
     if strategy in {"uniform", "combined"} and local_idx in uniform_set:
@@ -147,6 +149,8 @@ def _collect_reasons(
     if strategy in {"low_conf", "combined"}:
         if ball_detected and low_min <= ball_conf <= low_max:
             reasons.append("low_conf")
+    if strategy in {"missing_table_half", "combined"} and missing_table_half:
+        reasons.append("missing_table_half")
     return reasons
 
 
@@ -158,6 +162,8 @@ def _candidate_score(reasons: list[str], gameplay_ok: bool) -> float:
         score += 1.0
     if "missed" in reasons:
         score += 1.0
+    if "missing_table_half" in reasons:
+        score += 4.0
     if gameplay_ok:
         score += 5.0
     return score
@@ -170,37 +176,89 @@ def _time_to_bin(time_sec: float, start_sec: float, end_sec: float, num_bins: in
     return min(num_bins - 1, int(rel * num_bins))
 
 
-def _frame_index_from_name(name: str) -> int | None:
-    """Извлечь frame index из frame_XXXXXX.jpg или frame_XXXXXX_jpg.rf.*."""
-    stem = Path(name).stem
-    if stem.startswith("frame_"):
-        num_part = stem.split("_", 1)[1].split("_")[0]
-        if num_part.isdigit():
-            return int(num_part)
+_NAMED_FRAME_RE = re.compile(r"^(?P<video>.+)_f(?P<idx>\d+)")
+_LEGACY_FRAME_RE = re.compile(r"^frame_(?P<idx>\d+)")
+_V3_EXPORT_REL = Path("results/roboflow_pipeline/runs/tt_seg_v3_export/dataset")
+
+
+def _resolve_video_id(video_path: Path) -> str:
+    """Канонический video_id: IMG_0291.MOV -> IMG_0291, IMG_1043_sdr.mp4 -> IMG_1043."""
+    stem = Path(video_path).stem
+    if stem.lower().endswith("_sdr"):
+        stem = stem[: -len("_sdr")]
+    return stem
+
+
+def _parse_frame_identity(name: str) -> tuple[str | None, int | None]:
+    base = Path(name).name
+    legacy = _LEGACY_FRAME_RE.match(base)
+    if legacy:
+        return "IMG_0291", int(legacy.group("idx"))
+    named = _NAMED_FRAME_RE.match(base)
+    if named:
+        return named.group("video"), int(named.group("idx"))
+    return None, None
+
+
+def _frame_index_from_name(name: str, target_video_id: str | None = None) -> int | None:
+    """Индекс кадра из <VIDEO_ID>_fNNNNNN или legacy frame_NNNNNN (это IMG_0291)."""
+    video_id, frame_idx = _parse_frame_identity(name)
+    if frame_idx is None:
+        return None
+    if target_video_id is None or video_id == target_video_id:
+        return frame_idx
     return None
 
 
-def collect_exclude_indices(exclude_dirs: list[Path], export_dir: Path | None = None) -> set[int]:
-    """Собрать frame indices из images/ существующих run dirs и export dataset."""
+def _iter_image_names(directory: Path):
+    if not directory.is_dir():
+        return
+    for img in directory.iterdir():
+        if img.is_file() and img.suffix.lower() in {".jpg", ".jpeg", ".png"}:
+            yield img.name
+
+
+def collect_exclude_indices(
+    exclude_dirs: list[Path],
+    export_dir: Path | None = None,
+    target_video_id: str | None = None,
+) -> set[int]:
+    """Собрать frame indices уже размеченных кадров, чтобы не нарезать их повторно.
+
+    По умолчанию учитывается tt_seg_v3_export/dataset, если каталог есть на диске.
+    """
     excluded: set[int] = set()
-    for d in exclude_dirs:
-        images_dir = d / "images" if (d / "images").is_dir() else d
-        if not images_dir.is_dir():
-            continue
-        for img in images_dir.iterdir():
-            idx = _frame_index_from_name(img.name)
+    root = find_project_root()
+    export_dirs: list[Path] = []
+    default_v3 = root / _V3_EXPORT_REL
+    if default_v3.is_dir():
+        export_dirs.append(default_v3)
+    if export_dir is not None:
+        resolved = export_dir.resolve()
+        if all(resolved != existing.resolve() for existing in export_dirs):
+            export_dirs.append(export_dir)
+
+    def _add_from_images(images_dir: Path) -> None:
+        for name in _iter_image_names(images_dir):
+            idx = _frame_index_from_name(name, target_video_id)
             if idx is not None:
                 excluded.add(idx)
-    if export_dir is not None:
+
+    for folder in exclude_dirs:
+        images_dir = folder / "images" if (folder / "images").is_dir() else folder
+        _add_from_images(images_dir)
+    for dataset in export_dirs:
         for split in ("train", "valid", "test"):
-            images_dir = export_dir / split / "images"
-            if not images_dir.is_dir():
-                continue
-            for img in images_dir.iterdir():
-                idx = _frame_index_from_name(img.name)
-                if idx is not None:
-                    excluded.add(idx)
+            _add_from_images(dataset / split / "images")
     return excluded
+
+
+def _respects_min_gap(time_sec: float, selected: list[dict], min_gap_sec: float) -> bool:
+    gap = float(min_gap_sec)
+    for prev in selected:
+        if abs(float(time_sec) - float(prev["time_sec"])) < gap:
+            return False
+    return True
 
 
 def sample_from_video(
@@ -217,6 +275,7 @@ def sample_from_video(
     require_table_ball: bool = False,
     max_per_bin: int = 1,
     exclude_frame_indices: set[int] | None = None,
+    min_gap_sec: float = 0.5,
 ) -> list[dict]:
     exclude_frame_indices = exclude_frame_indices or set()
     out_images = output_dir / "images"
@@ -241,6 +300,9 @@ def sample_from_video(
     stride = int(sampling_cfg.get("uniform_stride", 30))
     ball_y_min_norm = float(sampling_cfg.get("ball_y_min_norm", 0.45))
     ball_speed_thresh = float(sampling_cfg.get("ball_speed_thresh_px", 8.0))
+    table_conf_min = float(sampling_cfg.get("table_conf_min", 0.25))
+    n_classes = len(model.names) if getattr(model, "names", None) else 0
+    video_id = _resolve_video_id(video_path)
 
     span = max(1, end_frame - start_frame)
     uniform_set = _pick_uniform(span, max_frames, stride)
@@ -264,12 +326,22 @@ def sample_from_video(
         ball_detected = False
         ball_conf = 0.0
         ball_xyxy: np.ndarray | None = None
-        for box in results.boxes:
-            if int(box.cls[0]) == 0:
-                ball_detected = True
-                ball_conf = float(box.conf[0])
-                ball_xyxy = box.xyxy[0].cpu().numpy().astype(np.float32)
-                break
+        has_table_left = False
+        has_table_right = False
+        if results.boxes is not None:
+            for box in results.boxes:
+                cls_id = int(box.cls[0])
+                conf_i = float(box.conf[0])
+                if cls_id == 0 and not ball_detected:
+                    ball_detected = True
+                    ball_conf = conf_i
+                    ball_xyxy = box.xyxy[0].cpu().numpy().astype(np.float32)
+                if n_classes >= 6 and conf_i >= table_conf_min:
+                    if cls_id == 4:
+                        has_table_left = True
+                    elif cls_id == 5:
+                        has_table_right = True
+        missing_half = n_classes >= 6 and not (has_table_left and has_table_right)
 
         ball_center: tuple[float, float] | None = None
         ball_speed_px = 0.0
@@ -293,6 +365,7 @@ def sample_from_video(
             low_max,
             missed_max,
             frame_idx,
+            missing_table_half=missing_half,
         )
 
         if ball_detected:
@@ -349,16 +422,23 @@ def sample_from_video(
     cap.release()
 
     selected: list[dict] = []
+    min_gap = float(min_gap_sec)
     for bin_idx, bucket in enumerate(bin_candidates):
         bucket.sort(key=lambda c: c["score"], reverse=True)
-        for cand in bucket[:max_per_bin]:
-            out_name = f"frame_{cand['frame_index']:06d}.jpg"
+        taken_in_bin = 0
+        for cand in bucket:
+            if taken_in_bin >= max_per_bin or len(selected) >= max_frames:
+                break
+            if not _respects_min_gap(float(cand["time_sec"]), selected, min_gap):
+                continue
+            out_name = f"{video_id}_f{cand['frame_index']:06d}.jpg"
             out_path = out_images / out_name
             cv2.imwrite(str(out_path), cand.pop("_frame"))
             selected.append(
                 {
                     "frame_index": cand["frame_index"],
                     "time_sec": cand["time_sec"],
+                    "video_id": video_id,
                     "output_image": str(out_path),
                     "ball_detected": cand["ball_detected"],
                     "ball_confidence": cand["ball_confidence"],
@@ -367,8 +447,7 @@ def sample_from_video(
                     "gameplay_ok": cand["gameplay_ok"],
                 }
             )
-            if len(selected) >= max_frames:
-                break
+            taken_in_bin += 1
         if len(selected) >= max_frames:
             break
 
@@ -384,9 +463,11 @@ def write_manifest(output_dir: Path, meta: dict) -> Path:
 def _resolve_video_sampling(cfg: dict, video_arg: str | None) -> dict:
     vs = cfg.get("video_sampling", {})
     key = "IMG_0291"
-    if video_arg and "IMG_0291" in video_arg.upper():
-        key = "IMG_0291"
-    return dict(vs.get(key, {}))
+    if video_arg:
+        video_id = _resolve_video_id(Path(video_arg))
+        if video_id in vs:
+            key = video_id
+    return dict(vs.get(key, vs.get("IMG_0291", {})))
 
 
 def main() -> None:
@@ -396,7 +477,11 @@ def main() -> None:
     parser.add_argument("--dataset-dir", type=str, default="dataset/train")
     parser.add_argument("--count", type=int, default=None)
     parser.add_argument("--output", type=str, required=True, help="runs/<batch> или images dir")
-    parser.add_argument("--strategy", choices=["uniform", "missed", "low_conf", "combined"], default=None)
+    parser.add_argument(
+        "--strategy",
+        choices=["uniform", "missed", "low_conf", "missing_table_half", "combined"],
+        default=None,
+    )
     parser.add_argument("--start", type=float, default=None)
     parser.add_argument("--end", type=float, default=None)
     parser.add_argument("--min-start-sec", type=float, default=None, help="Минимум времени от начала видео")
@@ -478,9 +563,16 @@ def main() -> None:
             export_dir = Path(args.exclude_export)
             if not export_dir.is_absolute():
                 export_dir = root / export_dir
-        exclude_indices = collect_exclude_indices(exclude_dirs, export_dir)
+        video_path = root / args.video if not Path(args.video).is_absolute() else Path(args.video)
+        video_id = _resolve_video_id(video_path)
+        min_gap_sec = float(video_cfg.get("min_gap_sec", sampling_cfg.get("min_gap_sec", 0.5)))
+        exclude_indices = collect_exclude_indices(
+            exclude_dirs,
+            export_dir,
+            target_video_id=video_id,
+        )
         frames = sample_from_video(
-            root / args.video if not Path(args.video).is_absolute() else Path(args.video),
+            video_path,
             run_dir,
             model_path,
             strategy,
@@ -493,14 +585,17 @@ def main() -> None:
             require_table_ball,
             max_per_bin=int(video_cfg.get("max_per_bin", 1)),
             exclude_frame_indices=exclude_indices,
+            min_gap_sec=min_gap_sec,
         )
         source = "video"
         times = [f["time_sec"] for f in frames]
         sampling_meta = {
             "mode": "video_stratified" if stratified else "video_sequential",
+            "video_id": video_id,
             "start_sec": start_sec,
             "end_sec": end_sec,
             "min_start_sec": min_start_sec,
+            "min_gap_sec": min_gap_sec,
             "stratified": stratified,
             "require_table_ball": require_table_ball,
             "excluded_frame_indices_count": len(exclude_indices),

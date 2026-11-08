@@ -2,7 +2,27 @@
 
 **Проект:** Table Tennis CV Score  
 **Версия:** 3.0  
-**Последнее обновление:** 06-09-2026 (consecfix scoring + impact timing)
+**Последнее обновление:** 08-11-2026 (правила проекта, трёхконтурная схема агентов, JSON-граф знаний и синхронизация капсул)
+
+---
+
+## [08-11-2026] - Рефакторинг правил, графа знаний и синхронизация с изменениями serve_detector
+
+### ✅ Добавлено (Added)
+
+- `AGENTS.md` — единая точка входа по проекту (SSoT модели, ключевые скрипты, 3 роли агентов, частые команды, карта документов)
+- `.cursor/rules/process.mdc` и `.cursor/rules/tabletennis.mdc` — компактные правила без противоречий
+- `config/knowledge_graph.json` — граф знаний проекта в JSON (узлы, связи, инварианты, лог решений)
+- `config/data_split.json` — реестр видео, ракурсов и непересекающихся окон (`train_candidates`, `tune`, `test`) по образцу `BANGroup/CV`
+- `tests/expected/IMG_0291_45_180.yaml`, `tests/expected/IMG_1043_full.yaml` и `scripts/verify_expected.py` — автоматическая сверка результатов трекинга и счёта с эталоном (`PASS=16 FAIL=0`)
+- `config/capsules_manifest.json` — индекс контекстных капсул (`tracking`, `scoring`, `yolo_model`)
+- `docs/DECISIONS.md` — табличный журнал архитектурных и алгоритмических решений (`D-01`..`D-07`)
+
+### 🔄 Изменено (Changed)
+
+- Схема агентов сведена к 3 рабочим контурам: `orchestrator` + `coder` + `validator`, рабочая модель субагентов переведена на `grok-4.7-high-fast` (`config/agent_models.json`)
+- Устаревшие правила (`.cursorrules`, `90_multiagent_workflow.mdc` и др.), лишние профили субагентов, неработающие хуки (`pre_close_guard.py`) и старый лог DE-спринтов (`agent_kg.json`) перенесены в `.cursor/archive/`
+- Синхронизированы капсулы `docs/tracking_capsule.md` и `docs/scoring_capsule.md` (фиксация стола только при наличии обеих половин `TableLeft`+`TableRight`, автоопределение сторон P1/P2 по классам 2/3, отложенный аут 0.4 с; на `IMG_1043` счёт выровнялся со `144:3` до `55:94`, удары `188 Left / 311 Right`)
 
 ---
 

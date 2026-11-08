@@ -1,0 +1,51 @@
+{
+  "version": "1.0",
+  "updated": "2026-11-08",
+  "capsules": [
+    {
+      "id": "tracking",
+      "path": "docs/tracking_capsule.md",
+      "domain": "tracking",
+      "covers": [
+        "детекция мяча и фильтрация Калмана",
+        "полигоны половин стола TableLeft и TableRight (фиксация только при наличии обеих половин)",
+        "детекция физических отскоков (y_range, curvature, окно ±2 кадра around bounce_frame, min_frame_gap)"
+      ],
+      "ssot": [
+        "scripts/config/detection_params.json",
+        "scripts/serve_detector.py"
+      ],
+      "updated": "2026-11-08"
+    },
+    {
+      "id": "scoring",
+      "path": "docs/scoring_capsule.md",
+      "domain": "scoring",
+      "covers": [
+        "автоопределение сторон игроков P1/P2 по классам модели (2 и 3) и голосование 12/15",
+        "линия разделения сторон по медиане середин между P1 и P2 при swap",
+        "подача (2/3 сигнала), отложенная сетка, отложенный аут (0.4 с), отложенный двойной отскок"
+      ],
+      "ssot": [
+        "scripts/serve_detector.py"
+      ],
+      "updated": "2026-11-08"
+    },
+    {
+      "id": "yolo_model",
+      "path": "docs/yolo_model_capsule.md",
+      "domain": "model",
+      "covers": [
+        "веса runs/segment/train14_ttseg_v3/weights/best.pt (6 классов)",
+        "откат на train12_ball68 через detection_params_train12.json",
+        "экспорт и доразметка через Roboflow"
+      ],
+      "ssot": [
+        "scripts/config/detection_params.json",
+        "scripts/config/detection_params_train12.json",
+        "scripts/config/roboflow.json"
+      ],
+      "updated": "2026-11-08"
+    }
+  ]
+}

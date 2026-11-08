@@ -58,6 +58,7 @@ def upload_batch(
     project_id: str,
     rebuild_zip: bool = True,
     label_format: str | None = None,
+    split: str = "train",
 ) -> dict:
     run_dir = Path(run_dir)
     zip_path = run_dir / "upload.zip"
@@ -86,7 +87,7 @@ def upload_batch(
         )
 
     try:
-        prep = prepare_upload_zip(project_id=project_id, batch_name=batch_name)
+        prep = prepare_upload_zip(project_id=project_id, batch_name=batch_name, split=split)
     except RuntimeError as exc:
         err = str(exc)
         missing_project = "404" in err or "does not exist" in err
@@ -105,6 +106,7 @@ def upload_batch(
             "batch_name": batch_name,
             "project_id": project_id,
             "label_format": fmt,
+            "split": split,
             "status": "failed",
             "error": err,
             "zip_path": str(zip_path),
@@ -124,6 +126,7 @@ def upload_batch(
         "batch_name": batch_name,
         "project_id": project_id,
         "label_format": fmt,
+        "split": split,
         "status": "success",
         "task_id": prep["task_id"],
         "batch_id": batch_id,
@@ -141,6 +144,7 @@ def main() -> None:
     parser.add_argument("--batch-name", type=str, required=True)
     parser.add_argument("--project-id", type=str, default=None)
     parser.add_argument("--format", choices=["seg", "seg_v2", "det"], default=None)
+    parser.add_argument("--split", choices=["train", "valid", "test"], default="train")
     parser.add_argument("--no-rebuild", action="store_true")
     args = parser.parse_args()
 
@@ -156,6 +160,7 @@ def main() -> None:
         project_id,
         rebuild_zip=not args.no_rebuild,
         label_format=args.format,
+        split=args.split,
     )
     result["project_resolution"] = project_meta
     if project_meta.get("note"):
@@ -175,6 +180,7 @@ def main() -> None:
         raise SystemExit(2)
 
     print(f"Uploaded batch_name={result['batch_name']}")
+    print(f"split={result.get('split', 'train')}")
     print(f"project_id={result['project_id']}")
     print(f"task_id={result['task_id']}")
     print(f"batch_id={result.get('batch_id')}")

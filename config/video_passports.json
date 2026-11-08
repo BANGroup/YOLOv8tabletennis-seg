@@ -1,0 +1,250 @@
+{
+  "schema_version": "1.0",
+  "updated_at": "2026-11-08T20:32:27+05:00",
+  "passports": [
+    {
+      "video_id": "GX010025",
+      "camera": "GoPro HERO (HEVC bt709)",
+      "camera_angle": "side_wide_gopro",
+      "players_swapped": false,
+      "resolution": "1920x1080",
+      "fps": 59.94,
+      "duration_sec": 693.5,
+      "color_profile": "bt709 (SDR yuvj420p)",
+      "needs_hdr_tonemap": false,
+      "probe": {
+        "codec_name": "hevc",
+        "width": 1920,
+        "height": 1080,
+        "pix_fmt": "yuvj420p",
+        "color_space": "bt709",
+        "color_transfer": "bt709",
+        "fps": 59.94,
+        "duration_sec": 693.543,
+        "size_bytes": 700176948
+      },
+      "paths": {
+        "nas_raw_path": "/mnt/nas-drive/CV/tabletennis/videos/GX010025/raw/GX010025.MP4",
+        "nas_sdr_path": null,
+        "local_path": "sources/GX010025.MP4",
+        "win_archive_path": "/media/misha/344E89504E890BB4/FromD/AI/YOLOv8tabletennis-seg/sources/GX010025.MP4",
+        "clips": []
+      },
+      "windows": [
+        {
+          "window_id": "GX010025_19_40_smoke",
+          "start_sec": 19.02,
+          "end_sec": 40.01,
+          "role": "tune",
+          "dataset_split": "valid"
+        },
+        {
+          "window_id": "GX010025_60_693",
+          "start_sec": 60,
+          "end_sec": 693,
+          "role": "train_candidates",
+          "dataset_split": "train"
+        }
+      ],
+      "updated_at": "2026-11-08T20:32:27+05:00"
+    },
+    {
+      "video_id": "GX010138",
+      "camera": "GoPro HERO (HEVC bt709)",
+      "camera_angle": "side_wide_gopro",
+      "players_swapped": false,
+      "resolution": "1920x1080",
+      "fps": 59.94,
+      "duration_sec": 1406.2,
+      "color_profile": "bt709 (SDR yuvj420p)",
+      "needs_hdr_tonemap": false,
+      "probe": {
+        "codec_name": "hevc",
+        "width": 1920,
+        "height": 1080,
+        "pix_fmt": "yuvj420p",
+        "color_space": "bt709",
+        "color_transfer": "bt709",
+        "fps": 59.94,
+        "duration_sec": 1406.171,
+        "size_bytes": 720234930
+      },
+      "paths": {
+        "nas_raw_path": "/mnt/nas-drive/CV/tabletennis/videos/GX010138/raw/GX010138.MP4",
+        "nas_sdr_path": null,
+        "local_path": "sources/GX010138.MP4",
+        "win_archive_path": "/media/misha/344E89504E890BB4/FromD/AI/YOLOv8tabletennis-seg/sources/GX010138.MP4",
+        "clips": []
+      },
+      "windows": [
+        {
+          "window_id": "GX010138_0_283_train",
+          "start_sec": 0,
+          "end_sec": 283.28,
+          "role": "train_candidates",
+          "dataset_split": "train"
+        },
+        {
+          "window_id": "GX010138_283_771_best_period",
+          "start_sec": 283.28,
+          "end_sec": 771.29,
+          "role": "tune",
+          "dataset_split": "valid"
+        },
+        {
+          "window_id": "GX010138_771_1406_test",
+          "start_sec": 771.29,
+          "end_sec": 1406,
+          "role": "test",
+          "dataset_split": "test"
+        }
+      ],
+      "updated_at": "2026-11-08T20:32:27+05:00"
+    },
+    {
+      "video_id": "IMG_0291",
+      "camera": "iPhone (SDR)",
+      "camera_angle": "side_view (Player1 слева, Player2 справа)",
+      "players_swapped": false,
+      "resolution": "1280x720",
+      "fps": 30.0,
+      "duration_sec": 356.6,
+      "color_profile": "bt709 (SDR)",
+      "needs_hdr_tonemap": false,
+      "probe": {
+        "codec_name": "h264",
+        "width": 1280,
+        "height": 720,
+        "pix_fmt": "yuv420p",
+        "color_space": "bt709",
+        "color_transfer": "bt709",
+        "fps": 30.0,
+        "duration_sec": 356.6,
+        "size_bytes": 137149717
+      },
+      "paths": {
+        "nas_raw_path": "/mnt/nas-drive/CV/tabletennis/videos/IMG_0291/raw/IMG_0291.MOV",
+        "nas_sdr_path": null,
+        "local_path": "sources/IMG_0291.MOV",
+        "win_archive_path": null,
+        "clips": []
+      },
+      "windows": [
+        {
+          "window_id": "IMG_0291_warmup",
+          "start_sec": 0,
+          "end_sec": 45,
+          "role": "train_and_tune_warmup",
+          "dataset_split": "train"
+        },
+        {
+          "window_id": "IMG_0291_45_180",
+          "start_sec": 45,
+          "end_sec": 180,
+          "role": "tune",
+          "dataset_split": "valid"
+        },
+        {
+          "window_id": "IMG_0291_180_356",
+          "start_sec": 180,
+          "end_sec": 356,
+          "role": "train_candidates",
+          "dataset_split": "train"
+        }
+      ],
+      "updated_at": "2026-11-08T20:32:26+05:00"
+    },
+    {
+      "video_id": "IMG_0973",
+      "camera": "iPhone (HLG HDR -> SDR)",
+      "camera_angle": "side_angled_view",
+      "players_swapped": false,
+      "resolution": "1920x1080",
+      "fps": 59.94,
+      "duration_sec": 2076.6,
+      "color_profile": "HLG bt2020 -> tonemapped SDR bt709 (IMG_0973_sdr.mp4)",
+      "needs_hdr_tonemap": true,
+      "probe": {
+        "codec_name": "hevc",
+        "width": 1920,
+        "height": 1080,
+        "pix_fmt": "yuv420p10le",
+        "color_space": "bt2020nc",
+        "color_transfer": "arib-std-b67",
+        "fps": 59.94,
+        "duration_sec": 2076.614,
+        "size_bytes": 3497707455
+      },
+      "paths": {
+        "nas_raw_path": "/mnt/nas-drive/CV/tabletennis/videos/IMG_0973/raw/IMG_0973.MOV",
+        "nas_sdr_path": "/mnt/nas-drive/CV/tabletennis/videos/IMG_0973/sdr/IMG_0973_sdr.mp4",
+        "local_path": "sources/IMG_0973_sdr.mp4",
+        "win_archive_path": null,
+        "clips": []
+      },
+      "windows": [
+        {
+          "window_id": "IMG_0973_train",
+          "start_sec": 0,
+          "end_sec": 1600,
+          "role": "train_candidates",
+          "dataset_split": "train"
+        },
+        {
+          "window_id": "IMG_0973_valid",
+          "start_sec": 1600,
+          "end_sec": 2076,
+          "role": "tune",
+          "dataset_split": "valid"
+        }
+      ],
+      "updated_at": "2026-11-08T20:32:26+05:00"
+    },
+    {
+      "video_id": "IMG_1043",
+      "camera": "iPhone (HLG HDR -> SDR)",
+      "camera_angle": "end_angled_view (игроки поменялись сторонами: Player2 слева, Player1 справа; ближняя половина стола крупным планом)",
+      "players_swapped": true,
+      "resolution": "1920x1080",
+      "fps": 59.94,
+      "duration_sec": 1312.5,
+      "color_profile": "HLG bt2020 -> tonemapped SDR bt709 (IMG_1043_sdr.mp4)",
+      "needs_hdr_tonemap": true,
+      "probe": {
+        "codec_name": "hevc",
+        "width": 1920,
+        "height": 1080,
+        "pix_fmt": "yuv420p10le",
+        "color_space": "bt2020nc",
+        "color_transfer": "arib-std-b67",
+        "fps": 59.94,
+        "duration_sec": 1312.498,
+        "size_bytes": 3294346732
+      },
+      "paths": {
+        "nas_raw_path": "/mnt/nas-drive/CV/tabletennis/videos/IMG_1043/raw/IMG_1043.MOV",
+        "nas_sdr_path": "/mnt/nas-drive/CV/tabletennis/videos/IMG_1043/sdr/IMG_1043_sdr.mp4",
+        "local_path": "sources/IMG_1043_sdr.mp4",
+        "win_archive_path": null,
+        "clips": []
+      },
+      "windows": [
+        {
+          "window_id": "IMG_1043_train_angle",
+          "start_sec": 0,
+          "end_sec": 400,
+          "role": "train_candidates",
+          "dataset_split": "train"
+        },
+        {
+          "window_id": "IMG_1043_test",
+          "start_sec": 400,
+          "end_sec": 1313,
+          "role": "test",
+          "dataset_split": "test"
+        }
+      ],
+      "updated_at": "2026-11-08T20:32:26+05:00"
+    }
+  ]
+}

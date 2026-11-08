@@ -12,8 +12,8 @@
 4. **Y-range >= 8** — минимальное движение по Y для удара (`serve_detector.py:215`)
 5. **Curvature >= 5** — минимальная кривизна траектории (`serve_detector.py:221`)
 6. **min_frame_gap = 12** — минимум 12 кадров между ударами (~0.2 сек) (`detection_params.json`, `serve_detector.py:73`)
-7. **Удар внутри стола** — точка должна быть в `table_polygon` (объединённый hull)
-8. **Сторона по X** — left если X < `table_center_x`, иначе right (`serve_detector.py:236-237`); scoring **не** использует TableLeft/TableRight полигоны для стороны
+7. **Удар внутри стола** — точка должна быть в `table_polygon` (объединённый hull); при `len(table_class_ids) >= 2` контур фиксируется только когда на одном кадре найдены обе половины (`TableLeft` и `TableRight`) (`serve_detector.py:_maybe_update_table_polygon`)
+8. **Сторона по X** — `left` если X < `table_center_x`, иначе `right`; `table_center_x` НЕ перезаписывается маской сетки, а при фиксации ориентации игроков обновляется медианой середин между `Player1` и `Player2` (`serve_detector.py`)
 9. **`bounce_frame`/`bounce_time`** — середина `frame_history`/`time_history`; вся time-логика impact использует их, не текущий кадр
 10. **`min_consecutive_detections=3`** — минимум 3 детекции мяча в окне ±2 кадра вокруг `bounce_frame` (`detected_frames`, `detection_window_radius=2`); имя в конфиге без изменений, изменён смысл
 11. **Kalman фильтр** — сглаживание траектории при пропусках

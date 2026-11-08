@@ -1,0 +1,92 @@
+{
+  "project_id": "auto-label-lmrwb",
+  "seg_project_id": "tt-seg-img0291",
+  "workspace": "yolo-table-tennis",
+  "local_model": "runs/segment/train14_ttseg_v3/weights/best.pt",
+  "legacy_model": "runs/segment/train12_ball68/weights/best.pt",
+  "data_split_config": "config/data_split.json",
+  "batch_name_template": "tt_{video_id}_{split}_{date}",
+  "label_mode": "roboflow_v2",
+  "video": "sources/IMG_0291.MOV",
+  "classes_seg_v2": ["Ball", "Net", "Player1", "Player2", "TableLeft", "TableRight"],
+  "classes_seg": ["TableLeft", "TableRight", "Net", "Player1", "Player2"],
+  "class_ball": "Ball",
+  "video_sampling": {
+    "IMG_0291": {
+      "start_sec": 0,
+      "end_sec": 356,
+      "max_frames": 80,
+      "min_start_sec": 0,
+      "min_gap_sec": 0.5,
+      "stratified": true,
+      "strategy": "combined",
+      "require_table_ball": true,
+      "max_per_bin": 1,
+      "players_swapped": false
+    },
+    "IMG_0973": {
+      "start_sec": 0,
+      "end_sec": 1600,
+      "max_frames": 100,
+      "min_start_sec": 0,
+      "min_gap_sec": 0.5,
+      "stratified": true,
+      "strategy": "combined",
+      "require_table_ball": true,
+      "max_per_bin": 1,
+      "players_swapped": false
+    },
+    "IMG_1043": {
+      "start_sec": 0,
+      "end_sec": 400,
+      "max_frames": 80,
+      "min_start_sec": 0,
+      "min_gap_sec": 0.5,
+      "stratified": true,
+      "strategy": "combined",
+      "require_table_ball": false,
+      "max_per_bin": 1,
+      "players_swapped": true
+    }
+  },
+  "sampling": {
+    "strategies": ["uniform", "missed", "low_conf", "missing_table_half", "combined"],
+    "default_strategy": "combined",
+    "max_frames": 80,
+    "uniform_stride": 30,
+    "min_gap_sec": 0.5,
+    "low_conf_min": 0.03,
+    "low_conf_max": 0.35,
+    "table_conf_min": 0.25,
+    "missed_max_consecutive": 5,
+    "confidence": 0.03,
+    "ball_y_min_norm": 0.40,
+    "ball_speed_thresh_px": 8.0
+  },
+  "autolabel_models": {
+    "M1": {
+      "model_type": "roboflow",
+      "model": "yolo-table-tennis/auto-label-lmrwb-instant-1"
+    },
+    "M2": {
+      "model_type": "foundational",
+      "model": "sam3",
+      "ontology": {
+        "Ball": "table tennis ball",
+        "Net": "net",
+        "TableLeft": "table tennis table left half",
+        "TableRight": "table tennis table right half",
+        "Player1": "table tennis player",
+        "Player2": "table tennis player"
+      }
+    }
+  },
+  "classes": ["Ball", "Net", "Player1", "Player2", "Table"],
+  "fallback": {
+    "dataset_sample": {
+      "dataset_dir": "dataset/train",
+      "count": 20,
+      "name_pattern": "frame_000"
+    }
+  }
+}

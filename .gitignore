@@ -115,7 +115,14 @@ results/**/frames/
 !docs/FSM_analysis/fsm_logic.json
 !results/data/*.json
 !scripts/config/*.json
+!results/roboflow_pipeline/config/*.json
 !config/agent_models.json
+!config/knowledge_graph.json
+!config/capsules_manifest.json
+!config/data_split.json
+!config/video_passports.json
+!config/passports/*.json
+!.cursor/archive/**/*.json
 !.cursor/mcp.json
 !.cursor/mcp.example.json
 !data.yaml

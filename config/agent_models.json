@@ -1,23 +1,19 @@
 {
-  "default_subagent_model": "composer-2.5-fast",
+  "default_subagent_model": "grok-4.7-high-fast",
   "orchestrator_model": "inherit",
-  "explore_subagent_model": "composer-2.5-fast",
+  "explore_subagent_model": "grok-4.7-high-fast",
   "agents": {
-    "analyst": "composer-2.5-fast",
-    "coder": "composer-2.5-fast",
-    "coder-tracking": "composer-2.5-fast",
-    "coder-scoring": "composer-2.5-fast",
-    "reviewer": "composer-2.5-fast",
-    "validator": "composer-2.5-fast",
-    "governance-compliance": "composer-2.5-fast",
-    "docs-curator": "composer-2.5-fast",
-    "capsule-builder": "composer-2.5-fast"
+    "coder": "grok-4.7-high-fast",
+    "validator": "grok-4.7-high-fast"
   },
   "allowed_models": [
-    "composer-2-fast",
-    "composer-2.5-fast",
-    "gpt-5.3-codex",
-    "gpt-5.5-medium"
+    "grok-4.7-high-fast",
+    "cursor-grok-4.6-high",
+    "gpt-5.6-sol-medium",
+    "claude-sonnet-5-5-high",
+    "claude-opus-5-5-medium",
+    "gemini-4-argon-medium",
+    "composer-2.5-fast"
   ],
-  "notes": "SSoT моделей subagents. Оркестратор при Task(...) передаёт model из agents[<subagent_type>] или default_subagent_model. Обновлено: composer 2 → 2.5."
+  "notes": "SSoT моделей трёхконтурной схемы (orchestrator + coder + validator + встроенный explore). Основная рабочая модель субагентов: grok-4.7-high-fast."
 }

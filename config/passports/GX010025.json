@@ -1,0 +1,63 @@
+{
+  "video_id": "GX010025",
+  "camera": "GoPro HERO (HEVC bt709)",
+  "camera_angle": "side_wide_gopro",
+  "players_swapped": false,
+  "resolution": "1920x1080",
+  "fps": 59.94,
+  "duration_sec": 693.5,
+  "color_profile": "bt709 (SDR yuvj420p)",
+  "files": {
+    "raw": {
+      "path": "/mnt/nas-drive/CV/tabletennis/videos/GX010025/raw/GX010025.MP4",
+      "size_bytes": 700176948,
+      "ffprobe": {
+        "codec_name": "hevc",
+        "width": 1920,
+        "height": 1080,
+        "pix_fmt": "yuvj420p",
+        "color_transfer": "bt709",
+        "nb_frames": "41571",
+        "duration": "693.542850"
+      }
+    },
+    "sdr": null,
+    "clips": [
+      {
+        "clip_id": "GX010025_20sec_raw",
+        "path": "/mnt/nas-drive/CV/tabletennis/videos/GX010025/clips/GX010025_20sec_raw.mp4",
+        "size_bytes": 21620743,
+        "ffprobe": {
+          "codec_name": "hevc",
+          "width": 1920,
+          "height": 1080,
+          "pix_fmt": "yuvj420p",
+          "color_transfer": "bt709",
+          "nb_frames": "1258",
+          "duration": "20.007000"
+        }
+      }
+    ]
+  },
+  "windows": [
+    {
+      "window_id": "GX010025_0_20",
+      "start_sec": 0,
+      "end_sec": 20,
+      "role": "tune",
+      "dataset_split": "valid",
+      "serve_order_errors": null,
+      "expected_spec": null
+    },
+    {
+      "window_id": "GX010025_60_693",
+      "start_sec": 60,
+      "end_sec": 693,
+      "role": "train_candidates",
+      "dataset_split": "train",
+      "serve_order_errors": null,
+      "expected_spec": null
+    }
+  ],
+  "updated_at": "2026-11-08T20:18:38+05:00"
+}

@@ -1,0 +1,46 @@
+# Эталонная спецификация проверки: IMG_0291 (окно 45–180 с)
+spec_id: IMG_0291_45_180
+video: sources/IMG_0291.MOV
+segment:
+  start_sec: 45
+  end_sec: 180
+role: tune
+model_path: runs/segment/train14_ttseg_v3/weights/best.pt
+reference_artifact: results/serve_detector_train14_img0291_window/smart_impacts_analysis.json
+updated_at: "2026-11-08"
+
+checks:
+  total_detections:
+    min: 1800
+    baseline: 1924
+  smart_impacts:
+    min: 78
+    max: 92
+    baseline: 85
+  score:
+    player1:
+      min: 6
+      max: 10
+      baseline: 8
+    player2:
+      min: 4
+      max: 8
+      baseline: 6
+  serve_count:
+    min: 10
+    max: 18
+    baseline: 14
+
+human_verified_anchors:
+  - time_sec: 52.3
+    tolerance_sec: 2.0
+    winner_player: 1
+    note: "Подтверждено Мишей (CHANGELOG 06-09-2026)"
+  - time_sec: 65.1
+    tolerance_sec: 2.0
+    winner_player: 2
+    note: "Подтверждено Мишей (CHANGELOG 06-09-2026)"
+  - time_sec: 74.1
+    tolerance_sec: 2.0
+    winner_player: 1
+    note: "Подтверждено Мишей (CHANGELOG 06-09-2026)"

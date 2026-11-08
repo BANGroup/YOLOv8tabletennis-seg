@@ -1,0 +1,226 @@
+{
+  "schema_version": "1.4",
+  "project": "YOLOv8tabletennis-seg",
+  "updated_at": "2026-11-08",
+  "nas_storage": {
+    "host": "192.168.0.83",
+    "share": "//192.168.0.83/home",
+    "mount_point": "/mnt/nas-drive",
+    "project_root": "/mnt/nas-drive/CV/tabletennis",
+    "inbox_dir": "/mnt/nas-drive/CV/tabletennis/inbox",
+    "videos_dir": "/mnt/nas-drive/CV/tabletennis/videos",
+    "datasets_dir": "/mnt/nas-drive/CV/tabletennis/datasets",
+    "local_cache_dir": "sources"
+  },
+  "split_policy": "Хранятся и используются ТОЛЬКО 5 уникальных мастер-видео (без дублирующих нарезок clips). Разделение строго по видео и непересекающимся временным окнам (запрещено случайное покадровое деление соседних кадров одного розыгрыша между train/valid/test). Минимальный шаг между отбираемыми кадрами >= 0.5 с. Имена файлов с префиксом видео: <video_id>_f<frame_idx:06d>.jpg.",
+  "videos": [
+    {
+      "video_id": "IMG_0291",
+      "camera": "iPhone (SDR)",
+      "path": "sources/IMG_0291.MOV",
+      "nas_dir": "/mnt/nas-drive/CV/tabletennis/videos/IMG_0291",
+      "nas_passport_path": "/mnt/nas-drive/CV/tabletennis/videos/IMG_0291/passport.json",
+      "nas_raw_path": "/mnt/nas-drive/CV/tabletennis/videos/IMG_0291/raw/IMG_0291.MOV",
+      "resolution": "1280x720",
+      "fps": 30.0,
+      "duration_sec": 356.6,
+      "color_profile": "bt709 (SDR)",
+      "camera_angle": "side_view (Player1 слева, Player2 справа)",
+      "players_swapped": false,
+      "windows": [
+        {
+          "window_id": "IMG_0291_warmup",
+          "start_sec": 0,
+          "end_sec": 45,
+          "role": "train_and_tune_warmup",
+          "dataset_split": "train",
+          "serve_order_errors": "warning_only",
+          "notes": "Разминка: полноценные розыгрыши (мяч, стол, сетка, отскоки и очки как в матче); нарушения очерёдности подач трактовать только как warning"
+        },
+        {
+          "window_id": "IMG_0291_45_180",
+          "start_sec": 45,
+          "end_sec": 180,
+          "role": "tune",
+          "dataset_split": "valid",
+          "notes": "Калибровочное окно (in-domain для train13/train14, калибровка порогов отскоков, сетки и счёта)",
+          "expected_spec": "tests/expected/IMG_0291_45_180.yaml"
+        },
+        {
+          "window_id": "IMG_0291_180_356",
+          "start_sec": 180,
+          "end_sec": 356,
+          "role": "train_candidates",
+          "dataset_split": "train",
+          "notes": "Вторая половина видео: источник кадров мяча/стола для дообучения (img0291_balls_180_357)"
+        }
+      ]
+    },
+    {
+      "video_id": "IMG_0973",
+      "camera": "iPhone (HLG HDR -> SDR)",
+      "raw_path": "sources/IMG_0973.MOV",
+      "path": "sources/IMG_0973_sdr.mp4",
+      "nas_dir": "/mnt/nas-drive/CV/tabletennis/videos/IMG_0973",
+      "nas_passport_path": "/mnt/nas-drive/CV/tabletennis/videos/IMG_0973/passport.json",
+      "nas_raw_path": "/mnt/nas-drive/CV/tabletennis/videos/IMG_0973/raw/IMG_0973.MOV",
+      "nas_sdr_path": "/mnt/nas-drive/CV/tabletennis/videos/IMG_0973/sdr/IMG_0973_sdr.mp4",
+      "resolution": "1920x1080",
+      "fps": 59.94,
+      "duration_sec": 2076.6,
+      "color_profile": "HLG bt2020 -> tonemapped SDR bt709 (IMG_0973_sdr.mp4)",
+      "camera_angle": "side_angled_view",
+      "players_swapped": false,
+      "windows": [
+        {
+          "window_id": "IMG_0973_train",
+          "start_sec": 0,
+          "end_sec": 1600,
+          "role": "train_candidates",
+          "dataset_split": "train",
+          "notes": "Основная часть длинного матча (0–1600 с) для отбора кадров в train (motion blur, удары у сетки)"
+        },
+        {
+          "window_id": "IMG_0973_valid",
+          "start_sec": 1600,
+          "end_sec": 2076,
+          "role": "tune",
+          "dataset_split": "valid",
+          "notes": "Финальный отрезок матча (1600–2076 с) под валидацию модели и калибровку трекинга без пересечения с train"
+        }
+      ]
+    },
+    {
+      "video_id": "IMG_1043",
+      "camera": "iPhone (HLG HDR -> SDR)",
+      "raw_path": "sources/IMG_1043.MOV",
+      "path": "sources/IMG_1043_sdr.mp4",
+      "nas_dir": "/mnt/nas-drive/CV/tabletennis/videos/IMG_1043",
+      "nas_passport_path": "/mnt/nas-drive/CV/tabletennis/videos/IMG_1043/passport.json",
+      "nas_raw_path": "/mnt/nas-drive/CV/tabletennis/videos/IMG_1043/raw/IMG_1043.MOV",
+      "nas_sdr_path": "/mnt/nas-drive/CV/tabletennis/videos/IMG_1043/sdr/IMG_1043_sdr.mp4",
+      "resolution": "1920x1080",
+      "fps": 59.94,
+      "duration_sec": 1312.5,
+      "color_profile": "HLG bt2020 -> tonemapped SDR bt709 (IMG_1043_sdr.mp4)",
+      "camera_angle": "end_angled_view (игроки поменялись сторонами: Player2 слева, Player1 справа; ближняя половина стола крупным планом)",
+      "players_swapped": true,
+      "windows": [
+        {
+          "window_id": "IMG_1043_train_angle",
+          "start_sec": 0,
+          "end_sec": 400,
+          "role": "train_candidates",
+          "dataset_split": "train",
+          "serve_order_errors": "warning_only",
+          "notes": "Стартовый блок торцевого ракурса (0–400 с, включая разминку) для дообучения масок ближней/дальней половин стола"
+        },
+        {
+          "window_id": "IMG_1043_test",
+          "start_sec": 400,
+          "end_sec": 1313,
+          "role": "test",
+          "dataset_split": "test",
+          "notes": "Held-out тест на торцевом ракурсе (400–1313 с) + полный регрессионный прогон 0–1313 с по эталону",
+          "expected_spec": "tests/expected/IMG_1043_full.yaml"
+        }
+      ]
+    },
+    {
+      "video_id": "GX010025",
+      "camera": "GoPro HERO (HEVC bt709)",
+      "raw_path": "sources/GX010025.MP4",
+      "path": "sources/GX010025.MP4",
+      "win_archive_path": "/media/misha/344E89504E890BB4/FromD/AI/YOLOv8tabletennis-seg/sources/GX010025.MP4",
+      "nas_dir": "/mnt/nas-drive/CV/tabletennis/videos/GX010025",
+      "nas_passport_path": "/mnt/nas-drive/CV/tabletennis/videos/GX010025/passport.json",
+      "nas_raw_path": "/mnt/nas-drive/CV/tabletennis/videos/GX010025/raw/GX010025.MP4",
+      "resolution": "1920x1080",
+      "fps": 59.94,
+      "duration_sec": 693.5,
+      "color_profile": "bt709 (SDR yuvj420p)",
+      "camera_angle": "side_wide_gopro",
+      "players_swapped": false,
+      "windows": [
+        {
+          "window_id": "GX010025_19_40_smoke",
+          "start_sec": 19.02,
+          "end_sec": 40.01,
+          "role": "tune",
+          "dataset_split": "valid",
+          "notes": "Классический 21-секундный smoke-отрезок (бывший дубликат GX010025_20sec_raw.mp4, кадры 1140..2398, ~15 ударов)"
+        },
+        {
+          "window_id": "GX010025_60_693",
+          "start_sec": 60,
+          "end_sec": 693,
+          "role": "train_candidates",
+          "dataset_split": "train",
+          "notes": "Основной массив GoPro-матча (источник кадров ball68)"
+        }
+      ]
+    },
+    {
+      "video_id": "GX010138",
+      "camera": "GoPro HERO (HEVC bt709)",
+      "raw_path": "sources/GX010138.MP4",
+      "path": "sources/GX010138.MP4",
+      "win_archive_path": "/media/misha/344E89504E890BB4/FromD/AI/YOLOv8tabletennis-seg/sources/GX010138.MP4",
+      "nas_dir": "/mnt/nas-drive/CV/tabletennis/videos/GX010138",
+      "nas_passport_path": "/mnt/nas-drive/CV/tabletennis/videos/GX010138/passport.json",
+      "nas_raw_path": "/mnt/nas-drive/CV/tabletennis/videos/GX010138/raw/GX010138.MP4",
+      "resolution": "1920x1080",
+      "fps": 59.94,
+      "duration_sec": 1406.2,
+      "color_profile": "bt709 (SDR yuvj420p)",
+      "camera_angle": "side_wide_gopro",
+      "players_swapped": false,
+      "windows": [
+        {
+          "window_id": "GX010138_0_283_train",
+          "start_sec": 0,
+          "end_sec": 283.28,
+          "role": "train_candidates",
+          "dataset_split": "train",
+          "notes": "Начальный блок матча GoPro (первая часть бывшего 10min_raw)"
+        },
+        {
+          "window_id": "GX010138_283_771_best_period",
+          "start_sec": 283.28,
+          "end_sec": 771.29,
+          "role": "tune",
+          "dataset_split": "valid",
+          "notes": "Лучший игровой период (бывший дубликат GX010138_cut_best_period.mp4, 488 с)"
+        },
+        {
+          "window_id": "GX010138_771_1406_test",
+          "start_sec": 771.29,
+          "end_sec": 1406,
+          "role": "test",
+          "dataset_split": "test",
+          "notes": "Held-out концовка матча GoPro"
+        }
+      ]
+    }
+  ],
+  "datasets": [
+    {
+      "dataset_id": "ball68_v6",
+      "path": "dataset/data.yaml",
+      "roboflow_project": "yolo-table-tennis/auto-label-lmrwb",
+      "classes_count": 5,
+      "images": { "train": 474, "valid": 40, "test": 20 },
+      "trained_model": "runs/segment/train12_ball68/weights/best.pt",
+      "known_issue": "Покадровый сплит Roboflow из одного источника (завышает val mAP)"
+    },
+    {
+      "dataset_id": "tt_seg_v3",
+      "path": "results/roboflow_pipeline/runs/tt_seg_v3_export/dataset/data.yaml",
+      "roboflow_project": "yolo-table-tennis/tt-seg-img0291",
+      "classes_count": 6,
+      "images": { "train": 141, "valid": 15, "test": 4 },
+      "trained_model": "runs/segment/train14_ttseg_v3/weights/best.pt",
+      "known_issue": "Обучено только на ракурсе IMG_0291; для 100% детекции стола с торцевого ракурса требуется добавление кадров из IMG_1043 (0–400 с) с пересборкой сплитов через repack_splits_by_video.py"
+    }
+  ]
+}

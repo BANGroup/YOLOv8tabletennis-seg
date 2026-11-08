@@ -1,0 +1,57 @@
+{
+  "video_id": "IMG_0291",
+  "camera": "iPhone (SDR)",
+  "camera_angle": "side_view (Player1 слева, Player2 справа)",
+  "players_swapped": false,
+  "resolution": "1280x720",
+  "fps": 30.0,
+  "duration_sec": 356.6,
+  "color_profile": "bt709 (SDR)",
+  "files": {
+    "raw": {
+      "path": "/mnt/nas-drive/CV/tabletennis/videos/IMG_0291/raw/IMG_0291.MOV",
+      "size_bytes": 137149717,
+      "ffprobe": {
+        "codec_name": "h264",
+        "width": 1280,
+        "height": 720,
+        "pix_fmt": "yuv420p",
+        "color_transfer": "bt709",
+        "nb_frames": "10698",
+        "duration": "356.600000"
+      }
+    },
+    "sdr": null,
+    "clips": []
+  },
+  "windows": [
+    {
+      "window_id": "IMG_0291_warmup",
+      "start_sec": 0,
+      "end_sec": 45,
+      "role": "train_and_tune_warmup",
+      "dataset_split": "train",
+      "serve_order_errors": "warning_only",
+      "expected_spec": null
+    },
+    {
+      "window_id": "IMG_0291_45_180",
+      "start_sec": 45,
+      "end_sec": 180,
+      "role": "tune",
+      "dataset_split": "valid",
+      "serve_order_errors": null,
+      "expected_spec": "tests/expected/IMG_0291_45_180.yaml"
+    },
+    {
+      "window_id": "IMG_0291_180_356",
+      "start_sec": 180,
+      "end_sec": 356,
+      "role": "train_candidates",
+      "dataset_split": "train",
+      "serve_order_errors": null,
+      "expected_spec": null
+    }
+  ],
+  "updated_at": "2026-11-08T20:18:37+05:00"
+}

@@ -1,0 +1,60 @@
+{
+  "video_id": "IMG_1043",
+  "camera": "iPhone (HLG HDR -> SDR)",
+  "camera_angle": "end_angled_view (игроки поменялись сторонами: Player2 слева, Player1 справа; ближняя половина стола крупным планом)",
+  "players_swapped": true,
+  "resolution": "1920x1080",
+  "fps": 59.94,
+  "duration_sec": 1312.5,
+  "color_profile": "HLG bt2020 -> tonemapped SDR bt709 (IMG_1043_sdr.mp4)",
+  "files": {
+    "raw": {
+      "path": "/mnt/nas-drive/CV/tabletennis/videos/IMG_1043/raw/IMG_1043.MOV",
+      "size_bytes": 3294346732,
+      "ffprobe": {
+        "codec_name": "hevc",
+        "width": 1920,
+        "height": 1080,
+        "pix_fmt": "yuv420p10le",
+        "color_transfer": "arib-std-b67",
+        "nb_frames": "78671",
+        "duration": "1312.498333"
+      }
+    },
+    "sdr": {
+      "path": "/mnt/nas-drive/CV/tabletennis/videos/IMG_1043/sdr/IMG_1043_sdr.mp4",
+      "size_bytes": 704163841,
+      "ffprobe": {
+        "codec_name": "h264",
+        "width": 1920,
+        "height": 1080,
+        "pix_fmt": "yuv420p",
+        "color_transfer": "bt709",
+        "nb_frames": "78671",
+        "duration": "1312.494517"
+      }
+    },
+    "clips": []
+  },
+  "windows": [
+    {
+      "window_id": "IMG_1043_train_angle",
+      "start_sec": 0,
+      "end_sec": 400,
+      "role": "train_candidates",
+      "dataset_split": "train",
+      "serve_order_errors": "warning_only",
+      "expected_spec": null
+    },
+    {
+      "window_id": "IMG_1043_test",
+      "start_sec": 400,
+      "end_sec": 1313,
+      "role": "test",
+      "dataset_split": "test",
+      "serve_order_errors": null,
+      "expected_spec": "tests/expected/IMG_1043_full.yaml"
+    }
+  ],
+  "updated_at": "2026-11-08T20:18:38+05:00"
+}

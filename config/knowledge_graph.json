@@ -1,0 +1,357 @@
+{
+  "schema_version": "1.2",
+  "project": "YOLOv8tabletennis-seg",
+  "updated_at": "2026-11-08",
+  "nodes": [
+    {
+      "id": "model:train14_ttseg_v3",
+      "type": "model",
+      "path": "runs/segment/train14_ttseg_v3/weights/best.pt",
+      "status": "prod",
+      "classes": {
+        "0": "Ball",
+        "1": "Net",
+        "2": "Player1",
+        "3": "Player2",
+        "4": "TableLeft",
+        "5": "TableRight"
+      }
+    },
+    {
+      "id": "model:train12_ball68",
+      "type": "model",
+      "path": "runs/segment/train12_ball68/weights/best.pt",
+      "status": "rollback_baseline",
+      "classes": {
+        "0": "Ball",
+        "1": "Net",
+        "2": "Player1",
+        "3": "Player2",
+        "4": "Table"
+      }
+    },
+    {
+      "id": "storage:nas_tabletennis",
+      "type": "storage",
+      "path": "/mnt/nas-drive/CV/tabletennis",
+      "share": "//192.168.0.83/home/CV/tabletennis",
+      "role": "Мастер-хранилище 5 видео на Home_NAS (inbox/, videos/<ID>/{raw,sdr,frames,passport.json}, datasets/)"
+    },
+    {
+      "id": "config:detection_params",
+      "type": "config",
+      "path": "scripts/config/detection_params.json",
+      "role": "SSoT параметров прод-модели и порогов детекции ударов"
+    },
+    {
+      "id": "config:detection_params_train12",
+      "type": "config",
+      "path": "scripts/config/detection_params_train12.json",
+      "role": "Конфиг быстрого отката на train12 (5 классов)"
+    },
+    {
+      "id": "config:data_split",
+      "type": "config",
+      "path": "config/data_split.json",
+      "role": "Реестр 5 уникальных мастер-видео, временных окон и ролей (train_candidates / tune / test)"
+    },
+    {
+      "id": "config:video_passports",
+      "type": "config",
+      "path": "config/video_passports.json",
+      "role": "Сводный реестр паспортов видео (ffprobe, размеры, окна, NAS пути)"
+    },
+    {
+      "id": "script:serve_detector",
+      "type": "script",
+      "path": "scripts/serve_detector.py",
+      "role": "Прод-пайплайн: сегментация стола/сетки/игроков, трекинг мяча, детекция отскоков и подсчёт очков"
+    },
+    {
+      "id": "script:verify_expected",
+      "type": "script",
+      "path": "scripts/verify_expected.py",
+      "role": "CLI-скрипт автоматической сверки результатов прогона с эталонными YAML из tests/expected/"
+    },
+    {
+      "id": "script:sync_nas_videos",
+      "type": "script",
+      "path": "scripts/sync_nas_videos.py",
+      "role": "CLI-скрипт проверки статуса, генерации паспортов и синхронизации видео с Home_NAS"
+    },
+    {
+      "id": "script:repack_splits_by_video",
+      "type": "script",
+      "path": "results/roboflow_pipeline/scripts/repack_splits_by_video.py",
+      "role": "Аудит и бесконфликтная пересборка сплитов датасета по окнам config/data_split.json без потери старых кадров v3"
+    },
+    {
+      "id": "script:main_processor_stable",
+      "type": "script",
+      "path": "scripts/main_processor_stable.py",
+      "role": "Эталонный неизменяемый baseline (только single table_class_id=4)"
+    },
+    {
+      "id": "test:IMG_0291_45_180",
+      "type": "expected_spec",
+      "path": "tests/expected/IMG_0291_45_180.yaml",
+      "role": "Калибровочный эталон (tune) на боковом ракурсе IMG_0291 (45–180 с)"
+    },
+    {
+      "id": "test:IMG_1043_full",
+      "type": "expected_spec",
+      "path": "tests/expected/IMG_1043_full.yaml",
+      "role": "Тестовый эталон (test) на торцевом ракурсе IMG_1043 (0–1313 с, players_swapped=True, обе половины стола)"
+    },
+    {
+      "id": "capsule:tracking",
+      "type": "capsule",
+      "path": "docs/tracking_capsule.md",
+      "domain": "tracking"
+    },
+    {
+      "id": "capsule:scoring",
+      "type": "capsule",
+      "path": "docs/scoring_capsule.md",
+      "domain": "scoring"
+    },
+    {
+      "id": "capsule:yolo_model",
+      "type": "capsule",
+      "path": "docs/yolo_model_capsule.md",
+      "domain": "model"
+    }
+  ],
+  "edges": [
+    {
+      "from": "script:serve_detector",
+      "to": "config:detection_params",
+      "rel": "reads_default_config"
+    },
+    {
+      "from": "config:detection_params",
+      "to": "model:train14_ttseg_v3",
+      "rel": "points_to_weights"
+    },
+    {
+      "from": "config:detection_params_train12",
+      "to": "model:train12_ball68",
+      "rel": "points_to_weights"
+    },
+    {
+      "from": "script:verify_expected",
+      "to": "test:IMG_0291_45_180",
+      "rel": "verifies_spec"
+    },
+    {
+      "from": "script:verify_expected",
+      "to": "test:IMG_1043_full",
+      "rel": "verifies_spec"
+    },
+    {
+      "from": "script:sync_nas_videos",
+      "to": "config:data_split",
+      "rel": "reads_video_registry"
+    },
+    {
+      "from": "script:sync_nas_videos",
+      "to": "config:video_passports",
+      "rel": "writes_passports"
+    },
+    {
+      "from": "script:sync_nas_videos",
+      "to": "storage:nas_tabletennis",
+      "rel": "syncs_videos_with"
+    },
+    {
+      "from": "script:repack_splits_by_video",
+      "to": "config:data_split",
+      "rel": "enforces_video_window_splits"
+    },
+    {
+      "from": "test:IMG_0291_45_180",
+      "to": "config:data_split",
+      "rel": "defined_in_split"
+    },
+    {
+      "from": "test:IMG_1043_full",
+      "to": "config:data_split",
+      "rel": "defined_in_split"
+    },
+    {
+      "from": "capsule:tracking",
+      "to": "script:serve_detector",
+      "rel": "documents_tracking_in"
+    },
+    {
+      "from": "capsule:scoring",
+      "to": "script:serve_detector",
+      "rel": "documents_scoring_in"
+    },
+    {
+      "from": "capsule:yolo_model",
+      "to": "config:detection_params",
+      "rel": "documents_model_ssot"
+    }
+  ],
+  "invariants": [
+    {
+      "id": "INV-01",
+      "rule": "Использовать только локальные обученные веса runs/segment/*/weights/best.pt с YOLO_OFFLINE=1",
+      "ssot": "scripts/config/detection_params.json"
+    },
+    {
+      "id": "INV-02",
+      "rule": "В двухклассовом режиме стола (table_class_ids=[4,5]) фиксировать table_polygon только когда на одном кадре найдены и TableLeft, и TableRight",
+      "ssot": "scripts/serve_detector.py"
+    },
+    {
+      "id": "INV-03",
+      "rule": "Стороны P1/P2 определяются по классам модели (2 и 3) голосованием 12/15 кадров; маска сетки не перезаписывает table_center_x",
+      "ssot": "scripts/serve_detector.py"
+    },
+    {
+      "id": "INV-04",
+      "rule": "Очко за аут начисляется с задержкой 0.4 с (отменяется, если мяч вернулся на стол)",
+      "ssot": "scripts/serve_detector.py"
+    },
+    {
+      "id": "INV-05",
+      "rule": "scripts/main_processor_stable.py не изменяется",
+      "ssot": "scripts/main_processor_stable.py"
+    },
+    {
+      "id": "INV-06",
+      "rule": "Хранятся и сэмплируются только 5 уникальных мастер-видео (без дублирующих нарезок clips); старые 160 кадров v3 неприкосновенны; приёмка изменений — через python3 scripts/verify_expected.py --all",
+      "ssot": "config/data_split.json"
+    }
+  ],
+  "backlog": [
+    {
+      "id": "B-01",
+      "title": "Переподача (LET) при касании сетки на подаче",
+      "description": "Если после 1-го удара подачи (is_serve=True) мяч касается полигона Net и падает на половину принимающего — фиксировать событие let_events (LET), не начислять очко и не сдвигать очередь подач."
+    },
+    {
+      "id": "B-02",
+      "title": "Универсальная обработка любого видео из сети и движущейся камеры (облёт дроном)",
+      "description": "Плавное обновление (EMA) полигонов TableLeft, TableRight и Net вместо однократной фиксации на старте, определение стороны отскока по полигонам половин стола/оси сетки и скользящее окно ориентации Player1/Player2."
+    }
+  ],
+  "handoffs_log": [
+    {
+      "id": "H-01",
+      "timestamp": "2026-11-08T17:26:00Z",
+      "agent": "coder",
+      "model": "grok-4.7-high-fast",
+      "subagent_id": "91a6ff99-1046-46d3-acd4-620b231774b1",
+      "task": "Реализация scripts/verify_expected.py для сверки эталонов tests/expected/*.yaml",
+      "changes": ["scripts/verify_expected.py"],
+      "facts": "py_compile OK; verify_expected.py --all -> PASS=16 FAIL=0"
+    },
+    {
+      "id": "H-02",
+      "timestamp": "2026-11-08T17:35:00Z",
+      "agent": "coder",
+      "model": "grok-4.7-high-fast",
+      "subagent_id": "c40a16de-8178-4462-a97b-abcbc4db3f36",
+      "task": "Поддержка уровня [WARN] для ошибок порядка подач на разминке (serve_order_errors: warning_only)",
+      "changes": ["scripts/verify_expected.py"],
+      "facts": "py_compile OK; PASS=16 WARN=0 FAIL=0 SKIP=0"
+    },
+    {
+      "id": "H-03",
+      "timestamp": "2026-11-08T17:50:00Z",
+      "agent": "coder",
+      "model": "grok-4.7-high-fast",
+      "subagent_id": "148abf35-4f52-4aea-bdd4-a330d5ca420c",
+      "task": "Обновление конвейера Roboflow (имена <video_id>_fNNNNNN.jpg, защита кадров v3, missing_table_half, repack_splits_by_video.py)",
+      "changes": [
+        "results/roboflow_pipeline/scripts/sample_frames.py",
+        "results/roboflow_pipeline/scripts/prelabel_yolo_seg.py",
+        "results/roboflow_pipeline/scripts/upload_batch.py",
+        "results/roboflow_pipeline/scripts/repack_splits_by_video.py"
+      ],
+      "facts": "py_compile OK (4 файла); аудит tt_seg_v3_export: 160 кадров сохранены без потерь, найдены 4 пары утечки <1.0s в старом сплите"
+    },
+    {
+      "id": "H-04",
+      "timestamp": "2026-11-08T20:20:00Z",
+      "agent": "coder",
+      "model": "grok-4.7-high-fast",
+      "subagent_id": "e39a81c0-fe98-4f04-b9d4-5c79aa0cc519",
+      "task": "Синхронизация 5 мастер-видео (iPhone + GoPro) с Home_NAS и генерация паспортов видео",
+      "changes": [
+        "scripts/sync_nas_videos.py",
+        "config/video_passports.json",
+        "config/passports/*.json"
+      ],
+      "facts": "7/7 файлов синхронизированы на /mnt/nas-drive/CV/tabletennis/videos/<ID>/, 5 паспортов OK, 3 дублирующие нарезки удалены"
+    }
+  ],
+  "decisions_log": [
+    {
+      "id": "D-01",
+      "date": "2026-09-01",
+      "decision": "Переход в прод на train14_ttseg_v3 (6 классов: TableLeft=4, TableRight=5)",
+      "rationale": "Раздельные маски половин стола улучшают геометрию игровой зоны на IMG_0291",
+      "replaces": "train12_ball68 (single Table=4)"
+    },
+    {
+      "id": "D-02",
+      "date": "2026-09-06",
+      "decision": "Фильтр min_consecutive_detections=3 проверяет окно ±2 кадра вокруг bounce_frame + расчёт времени отскока из середины истории",
+      "rationale": "Снижение потерь физических отскоков с 22 до 7 на IMG_0291 (45–180 с), счёт 8:6",
+      "replaces": "Счётчик последовательных кандидатов удара и тайминг по текущему кадру"
+    },
+    {
+      "id": "D-03",
+      "date": "2026-09-10",
+      "decision": "Отложенный аут (окно 0.4 с) вместо мгновенного закрытия розыгрыша",
+      "rationale": "Исключение ложных аутов, когда мяч после быстрого вылета возвращается в игру",
+      "replaces": "Немедленное начисление очка за аут"
+    },
+    {
+      "id": "D-04",
+      "date": "2026-10-15",
+      "decision": "Автоопределение ориентации игроков P1/P2 по классам 2 и 3 (голосование 12 из 15 кадров) и запрет перезаписи table_center_x медианой сетки",
+      "rationale": "При съёмке с другого ракурса (IMG_1043) игроки меняются сторонами, а смещённая маска сетки (x=1034) уводила все удары в одну половину",
+      "replaces": "Жёсткая привязка P1=left / P2=right и перезапись table_center_x из маски Net"
+    },
+    {
+      "id": "D-05",
+      "date": "2026-11-06",
+      "decision": "Фиксация контура стола только при одновременном наличии TableLeft и TableRight на кадре",
+      "rationale": "На первом кадре IMG_1043 детектировалась только дальняя половина стола (144:3 -> 55:94, удары 188 L / 311 R после фикса)",
+      "replaces": "Фиксация table_polygon по первому кадру с любой одной половиной стола"
+    },
+    {
+      "id": "D-06",
+      "date": "2026-11-08",
+      "decision": "Упрощение правил (AGENTS.md + process.mdc + tabletennis.mdc), 3 роли (orchestrator, coder, validator) и единый JSON-граф config/knowledge_graph.json",
+      "rationale": "Устранение противоречий в 50 КБ правил, отказ от неработающих хуков --close-workflow и ведение чистого графа знаний в JSON",
+      "replaces": ".cursorrules, 90_multiagent_workflow.mdc (10 ролей), config/agent_kg.json"
+    },
+    {
+      "id": "D-07",
+      "date": "2026-11-08",
+      "decision": "Внедрение структуры BANGroup/CV: config/data_split.json (деление по видео/окнам, включая warmup), tests/expected/*.yaml + scripts/verify_expected.py, перевод субагентов на grok-4.7-high-fast",
+      "rationale": "Исключение утечки соседних кадров между train/valid/test, автоматическая проверка регрессий (16/16 PASS) и чёткие инварианты для работы Grok 4.7",
+      "replaces": "Текстовое ожидание '~15 ударов' в правилах и покадровый сплит без реестра видео"
+    },
+    {
+      "id": "D-08",
+      "date": "2026-11-08",
+      "decision": "Аддитивное пополнение датасета tt-seg-img0291 новыми ракурсами без потери старых 160 кадров (<video_id>_f<frame_idx:06d>.jpg, стратегия missing_table_half, repack_splits_by_video.py)",
+      "rationale": "3D-инвариантность распознавания стола и сетки на разных ракурсах и при сложном свете/фокусе с сохранением всех существующих разметок",
+      "replaces": "Одноракурсный сэмплинг без префикса видео"
+    },
+    {
+      "id": "D-09",
+      "date": "2026-11-08",
+      "decision": "Хранение 5 мастер-видео по папкам на Home_NAS (//192.168.0.83/home/CV/tabletennis/videos/<ID>/) с паспортами passport.json и удаление 3 дублирующих нарезок GoPro",
+      "rationale": "Исключение дубликатов из обучения (GX010025_20sec, GX010138_10min, GX010138_cut_best_period полностью входили в мастер-файлы) и единый стандарт паспортов видео",
+      "replaces": "Плоская папка sources/ и хранение дублирующих нарезок"
+    }
+  ]
+}
