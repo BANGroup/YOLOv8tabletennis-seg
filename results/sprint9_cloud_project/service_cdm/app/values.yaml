@@ -1,0 +1,35 @@
+replicaCount: 1
+
+image:
+  repository: cr.yandex/crpj52tm6180eu1tlbg6/cdm_service
+  pullPolicy: IfNotPresent
+  tag: "v2026-09-27-r1"
+
+containerPort: 5000
+
+config:
+  KAFKA_HOST: "rc1a-s3d0ocjk2q364o4e.mdb.yandexcloud.net"
+  KAFKA_PORT: "9091"
+  KAFKA_CONSUMER_USERNAME: "producer_consumer"
+  KAFKA_CONSUMER_PASSWORD: "kafka123"
+  KAFKA_CONSUMER_GROUP: "cdm-service"
+  KAFKA_SOURCE_TOPIC: "dds-service-orders"
+  PG_WAREHOUSE_HOST: "rc1a-4ld0peitgvhegk5m.mdb.yandexcloud.net"
+  PG_WAREHOUSE_PORT: "6432"
+  PG_WAREHOUSE_DBNAME: "sprint9dwh"
+  PG_WAREHOUSE_USER: "db_user"
+  PG_WAREHOUSE_PASSWORD: "o6O0-iwSVdURagXuB7UAc8of"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
