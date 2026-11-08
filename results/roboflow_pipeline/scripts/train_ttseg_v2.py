@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fine-tune YOLOv8-seg on Roboflow tt-seg v2 dataset from train12 weights. Дата: 2026-08-31."""
+"""Fine-tune YOLOv8-seg from train14 weights. fliplr=0: классы сторон не зеркалятся. Дата: 2026-11-08."""
 
 from __future__ import annotations
 
@@ -73,6 +73,7 @@ def run_train(
     imgsz: int,
     batch: int,
     workers: int,
+    fliplr: float = 0.0,
 ) -> Path:
     os.environ.setdefault("YOLO_OFFLINE", "1")
 
@@ -87,7 +88,10 @@ def run_train(
     print(f"Data yaml  : {data_yaml}")
     print(f"Project    : {project}")
     print(f"Name       : {name}")
-    print(f"Epochs     : {epochs}, imgsz={imgsz}, batch={batch}, workers={workers}")
+    print(
+        f"Epochs     : {epochs}, imgsz={imgsz}, batch={batch}, "
+        f"workers={workers}, fliplr={fliplr}"
+    )
     print(f"YOLO_OFFLINE={os.environ.get('YOLO_OFFLINE')}")
 
     model = YOLO(str(model_path))
@@ -100,7 +104,7 @@ def run_train(
         name=name,
         exist_ok=True,
         flipud=0.0,
-        fliplr=0.5,
+        fliplr=fliplr,
         workers=workers,
         amp=False,
         pretrained=False,
@@ -113,21 +117,24 @@ def run_train(
 
 def main() -> int:
     root = find_project_root()
-    default_data = (
-        root
-        / "results/roboflow_pipeline/runs/tt_seg_v2_export/dataset/data.yaml"
-    )
-    default_model = root / "runs/segment/train12_ball68/weights/best.pt"
+    default_data = root / "results/roboflow_pipeline/runs/tt_seg_v3_export/dataset/data.yaml"
+    default_model = root / "runs/segment/train14_ttseg_v3/weights/best.pt"
 
     parser = argparse.ArgumentParser(
-        description="Fine-tune YOLOv8-seg on Roboflow tt-seg v2 (from train12)"
+        description="Fine-tune YOLOv8-seg on tt-seg v3 export (from train14, fliplr off)"
     )
     parser.add_argument("--data", type=Path, default=default_data, help="dataset data.yaml")
     parser.add_argument("--model", type=Path, default=default_model, help="base .pt weights")
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--imgsz", type=int, default=1280)
     parser.add_argument("--batch", type=int, default=4)
-    parser.add_argument("--name", type=str, default="train13_ttseg_v2")
+    parser.add_argument("--name", type=str, default="train15_ttseg_v4")
+    parser.add_argument(
+        "--fliplr",
+        type=float,
+        default=0.0,
+        help="horizontal flip probability (0: TableLeft/Right and Player1/2 stay side-aware)",
+    )
     parser.add_argument(
         "--project",
         type=Path,
@@ -167,6 +174,7 @@ def main() -> int:
                 imgsz=cfg["imgsz"],
                 batch=cfg["batch"],
                 workers=workers,
+                fliplr=args.fliplr,
             )
             return 0
         except RuntimeError as exc:

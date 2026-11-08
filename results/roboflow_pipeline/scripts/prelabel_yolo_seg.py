@@ -10,6 +10,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+import cv2
 import numpy as np
 from ultralytics import YOLO
 
@@ -45,6 +46,17 @@ RFV2_PLAYER2 = 3
 RFV2_TABLE_LEFT = 4
 RFV2_TABLE_RIGHT = 5
 RFV2_CLASS_NAMES = ["Ball", "Net", "Player1", "Player2", "TableLeft", "TableRight"]
+
+# BGR. Ball — жёлтый кружок r=10, чтобы мелкий мяч был виден на превью.
+VIS_CLASS_BGR: dict[str, tuple[int, int, int]] = {
+    "Ball": (0, 255, 255),
+    "Net": (255, 255, 0),
+    "Player1": (0, 255, 0),
+    "Player2": (0, 165, 255),
+    "TableLeft": (255, 100, 0),
+    "TableRight": (180, 0, 255),
+}
+VIS_FILL_ALPHA = 0.35
 
 
 def bbox_to_poly4_xyxy(xyxy: np.ndarray) -> np.ndarray:
@@ -110,30 +122,92 @@ def _clip_polygon_half_plane(
     return np.array(output, dtype=np.float32)
 
 
+_TABLE_SHARD_WIDTH_FRAC = np.float32(0.08)
+_TABLE_SHARD_AREA_FRAC = np.float32(0.005)
+
+
+def _polygon_width_x(poly: np.ndarray) -> np.float32:
+    xs = poly[:, 0]
+    return np.float32(np.max(xs) - np.min(xs))
+
+
+def _polygon_area(poly: np.ndarray) -> np.float32:
+    xs = poly[:, 0]
+    ys = poly[:, 1]
+    cross = np.sum(xs * np.roll(ys, -1) - np.roll(xs, -1) * ys, dtype=np.float32)
+    return np.float32(np.abs(cross) * np.float32(0.5))
+
+
+def _is_table_shard(poly: np.ndarray, img_w: int, img_h: int) -> bool:
+    """Узкий осколок вдоль сетки: ширина по X < 0.08 кадра или площадь < 0.005 кадра."""
+    if poly.shape[0] < 3:
+        return True
+    min_width = np.float32(img_w) * _TABLE_SHARD_WIDTH_FRAC
+    min_area = np.float32(img_w) * np.float32(img_h) * _TABLE_SHARD_AREA_FRAC
+    return bool(_polygon_width_x(poly) < min_width or _polygon_area(poly) < min_area)
+
+
+def _reject_table_shard(
+    poly: np.ndarray | None,
+    img_w: int,
+    img_h: int,
+) -> np.ndarray | None:
+    if poly is None or poly.shape[0] < 3:
+        return None
+    if _is_table_shard(poly, img_w, img_h):
+        return None
+    return poly
+
+
+def _largest_table_polygon(
+    polys: list[np.ndarray],
+    img_w: int,
+    img_h: int,
+) -> np.ndarray | None:
+    """Один полигон половины стола: осколки отброшены, остаётся крупнейший по площади."""
+    best: np.ndarray | None = None
+    best_area = np.float32(-1.0)
+    for poly in polys:
+        kept = _reject_table_shard(poly, img_w, img_h)
+        if kept is None:
+            continue
+        area = _polygon_area(kept)
+        if best is None or area > best_area:
+            best = kept
+            best_area = area
+    return best
+
+
 def split_table_polygon(
     poly_xy: np.ndarray,
     split_x: float,
     img_w: int,
     img_h: int,
 ) -> tuple[np.ndarray | None, np.ndarray | None]:
-    """Split table polygon into TableLeft / TableRight by vertical line at split_x."""
+    """Split table polygon into TableLeft / TableRight by vertical line at split_x.
+
+    Узкая половина (ширина по X < 0.08 * img_w или площадь < 0.005 * img_w * img_h)
+    отбрасывается как осколок вдоль сетки.
+    """
     poly = poly_xy.astype(np.float32)
     left = _clip_polygon_half_plane(poly, keep_left=True, split_x=split_x)
     right = _clip_polygon_half_plane(poly, keep_left=False, split_x=split_x)
+    max_x = np.float32(img_w)
+    max_y = np.float32(img_h)
 
     if left is not None and left.shape[0] >= 3:
-        left[:, 0] = np.clip(left[:, 0], 0.0, float(img_w))
-        left[:, 1] = np.clip(left[:, 1], 0.0, float(img_h))
+        left[:, 0] = np.clip(left[:, 0], np.float32(0.0), max_x)
+        left[:, 1] = np.clip(left[:, 1], np.float32(0.0), max_y)
     else:
         left = None
 
     if right is not None and right.shape[0] >= 3:
-        right[:, 0] = np.clip(right[:, 0], 0.0, float(img_w))
-        right[:, 1] = np.clip(right[:, 1], 0.0, float(img_h))
+        right[:, 0] = np.clip(right[:, 0], np.float32(0.0), max_x)
+        right[:, 1] = np.clip(right[:, 1], np.float32(0.0), max_y)
     else:
         right = None
 
-    return left, right
+    return _reject_table_shard(left, img_w, img_h), _reject_table_shard(right, img_w, img_h)
 
 
 def resolve_split_x(
@@ -269,6 +343,103 @@ def _select_players_spatial(
     return out
 
 
+def _line_to_polygon(line: str, img_w: int, img_h: int) -> tuple[int, np.ndarray] | None:
+    """YOLO-строка (полигон или bbox) → класс и точки в пикселях float32."""
+    parts = line.split()
+    if len(parts) < 5:
+        return None
+    cls_id = int(parts[0])
+    vals = np.asarray(parts[1:], dtype=np.float32)
+    scale_w = np.float32(img_w)
+    scale_h = np.float32(img_h)
+    if vals.size == 4:
+        cx, cy, bw, bh = vals
+        half = np.float32(0.5)
+        x1 = (cx - bw * half) * scale_w
+        y1 = (cy - bh * half) * scale_h
+        x2 = (cx + bw * half) * scale_w
+        y2 = (cy + bh * half) * scale_h
+        pts = np.array([[x1, y1], [x2, y1], [x2, y2], [x1, y2]], dtype=np.float32)
+        return cls_id, pts
+    if vals.size < 6 or vals.size % 2 != 0:
+        return None
+    xs = vals[0::2] * scale_w
+    ys = vals[1::2] * scale_h
+    pts = np.stack((xs, ys), axis=1).astype(np.float32, copy=False)
+    if pts.shape[0] < 3:
+        return None
+    return cls_id, pts
+
+
+def _contour_int(pts: np.ndarray) -> np.ndarray:
+    return np.rint(pts).astype(np.int32).reshape(-1, 1, 2)
+
+
+def _put_label(image: np.ndarray, text: str, org: tuple[int, int], color: tuple[int, int, int], scale: float = 0.5) -> None:
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    cv2.putText(image, text, org, font, scale, (0, 0, 0), 3, cv2.LINE_AA)
+    cv2.putText(image, text, org, font, scale, color, 1, cv2.LINE_AA)
+
+
+def _save_prelabel_preview(
+    img_path: Path,
+    lines: list[str],
+    vis_dir: Path | None,
+    class_names: list[str],
+    img_w: int,
+    img_h: int,
+) -> None:
+    """Полупрозрачная заливка и контур полигонов/боксов, записанных в lines."""
+    if vis_dir is None:
+        return
+    image = cv2.imread(str(img_path))
+    if image is None:
+        return
+
+    parsed: list[tuple[str, tuple[int, int, int], np.ndarray]] = []
+    for line in lines:
+        parsed_line = _line_to_polygon(line, img_w, img_h)
+        if parsed_line is None:
+            continue
+        cls_id, pts = parsed_line
+        name = class_names[cls_id] if 0 <= cls_id < len(class_names) else str(cls_id)
+        color = VIS_CLASS_BGR.get(name, (255, 255, 255))
+        parsed.append((name, color, pts))
+
+    overlay = image.copy()
+    for _name, color, pts in parsed:
+        cv2.fillPoly(overlay, [_contour_int(pts)], color)
+    canvas = cv2.addWeighted(overlay, VIS_FILL_ALPHA, image, 1.0 - VIS_FILL_ALPHA, 0.0)
+
+    seen: list[str] = []
+    for name, color, pts in parsed:
+        cv2.polylines(canvas, [_contour_int(pts)], True, color, 2, cv2.LINE_AA)
+        top_i = int(np.argmin(pts[:, 1]))
+        tx = int(pts[top_i, 0])
+        ty = int(pts[top_i, 1])
+        text_x = max(0, min(tx, canvas.shape[1] - 1))
+        text_y = ty - 6 if ty > 18 else ty + 16
+        _put_label(canvas, name, (text_x, max(text_y, 14)), color)
+        if name == "Ball":
+            n = np.float32(pts.shape[0])
+            cx = pts[:, 0].sum(dtype=np.float32) / n
+            cy = pts[:, 1].sum(dtype=np.float32) / n
+            cv2.circle(
+                canvas,
+                (int(np.rint(cx)), int(np.rint(cy))),
+                10,
+                color,
+                2,
+                cv2.LINE_AA,
+            )
+        if name not in seen:
+            seen.append(name)
+
+    summary = f"{img_path.name} | classes: {', '.join(seen) if seen else 'none'}"
+    _put_label(canvas, summary, (8, 22), (255, 255, 255), scale=0.55)
+    cv2.imwrite(str(vis_dir / img_path.name), canvas)
+
+
 def extract_instance_poly(result, idx: int, img_w: int, img_h: int) -> np.ndarray:
     if result.masks is not None and len(result.masks) > idx:
         xy = result.masks.xy[idx]
@@ -286,10 +457,14 @@ def prelabel_images(
     class_layout: str = "roboflow_v2",
     players_swapped: bool | None = None,
     split_config: dict | None = None,
+    vis_dir: Path | None = None,
 ) -> dict:
     images_dir = Path(images_dir)
     labels_dir = Path(labels_dir)
     labels_dir.mkdir(parents=True, exist_ok=True)
+    if vis_dir is not None:
+        vis_dir = Path(vis_dir)
+        vis_dir.mkdir(parents=True, exist_ok=True)
     use_rfv2 = class_layout == "roboflow_v2"
 
     model = YOLO(str(model_path))
@@ -311,6 +486,7 @@ def prelabel_images(
         "native_table_polygons": 0,
         "by_class": {name: 0 for name in class_names},
         "files": [],
+        "visualized_dir": str(vis_dir) if vis_dir else None,
     }
 
     for img_path in image_paths:
@@ -332,6 +508,7 @@ def prelabel_images(
                     "players_swapped": swapped,
                 }
             )
+            _save_prelabel_preview(img_path, lines, vis_dir, class_names, w, h)
             continue
 
         table_polys: list[np.ndarray] = []
@@ -396,21 +573,28 @@ def prelabel_images(
             stats["seg_polygons"] += 1
             stats["by_class"][class_name] += 1
 
-        for poly in direct_left:
-            _emit_poly(tl_cls, poly, "TableLeft")
-            stats["native_table_polygons"] += 1
-        for poly in direct_right:
-            _emit_poly(tr_cls, poly, "TableRight")
-            stats["native_table_polygons"] += 1
+        left_candidates: list[np.ndarray] = list(direct_left)
+        right_candidates: list[np.ndarray] = list(direct_right)
 
         for table_poly in table_polys:
             left, right = split_table_polygon(table_poly, split_x, w, h)
             if left is not None:
-                _emit_poly(tl_cls, left, "TableLeft")
+                left_candidates.append(left)
             if right is not None:
-                _emit_poly(tr_cls, right, "TableRight")
+                right_candidates.append(right)
             if left is not None or right is not None:
                 stats["table_splits"] += 1
+
+        best_left = _largest_table_polygon(left_candidates, w, h)
+        best_right = _largest_table_polygon(right_candidates, w, h)
+        if best_left is not None:
+            _emit_poly(tl_cls, best_left, "TableLeft")
+            if any(best_left is poly for poly in direct_left):
+                stats["native_table_polygons"] += 1
+        if best_right is not None:
+            _emit_poly(tr_cls, best_right, "TableRight")
+            if any(best_right is poly for poly in direct_right):
+                stats["native_table_polygons"] += 1
 
         for seg_cls, poly in deferred_seg:
             lines.append(poly_to_yolo_seg(seg_cls, poly, w, h))
@@ -448,6 +632,7 @@ def prelabel_images(
                 "players_swapped": swapped,
             }
         )
+        _save_prelabel_preview(img_path, lines, vis_dir, class_names, w, h)
 
     fmt = "roboflow_v2" if use_rfv2 else "hybrid_seg"
     report = {
@@ -498,6 +683,17 @@ def main() -> None:
         default=None,
         help="Левая сторона кадра = Player2. По умолчанию авто по имени файла и config/data_split.json",
     )
+    parser.add_argument(
+        "--vis-dir",
+        type=str,
+        default=None,
+        help="папка превью разметки (по умолчанию <run-dir>/visualized)",
+    )
+    parser.add_argument(
+        "--no-vis",
+        action="store_true",
+        help="не сохранять превью в visualized/",
+    )
     args = parser.parse_args()
 
     root = find_project_root()
@@ -507,6 +703,12 @@ def main() -> None:
     images_dir = Path(args.images) if args.images else run_dir / "images"
     labels_dir = Path(args.labels) if args.labels else run_dir / "labels"
     model_path = Path(args.model) if args.model else root / cfg["local_model"]
+    if args.no_vis:
+        vis_dir = None
+    elif args.vis_dir:
+        vis_dir = Path(args.vis_dir)
+    else:
+        vis_dir = run_dir / "visualized"
 
     report = prelabel_images(
         images_dir,
@@ -515,6 +717,7 @@ def main() -> None:
         args.conf,
         args.class_layout,
         players_swapped=args.players_swapped,
+        vis_dir=vis_dir,
     )
     report_path = run_dir / "prelabel_report.json"
     report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -529,6 +732,8 @@ def main() -> None:
         f"{ball_info}"
     )
     print(f"Report: {report_path}")
+    if report["stats"].get("visualized_dir"):
+        print(f"Visualized: {report['stats']['visualized_dir']}")
 
 
 if __name__ == "__main__":

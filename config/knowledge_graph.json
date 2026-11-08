@@ -287,6 +287,61 @@
         "config/passports/*.json"
       ],
       "facts": "7/7 файлов синхронизированы на /mnt/nas-drive/CV/tabletennis/videos/<ID>/, 5 паспортов OK, 3 дублирующие нарезки удалены"
+    },
+    {
+      "id": "H-05",
+      "timestamp": "2026-11-08T21:08:00Z",
+      "agent": "coder",
+      "model": "grok-4.7-high-fast",
+      "subagent_id": "c5a99f67-c93d-4782-8121-0df7ae4d1247",
+      "task": "Отключение fliplr (default 0.0) в train_ttseg_v2.py и генерация папки превью visualized/ в prelabel_yolo_seg.py",
+      "changes": [
+        "results/roboflow_pipeline/scripts/train_ttseg_v2.py",
+        "results/roboflow_pipeline/scripts/prelabel_yolo_seg.py"
+      ],
+      "facts": "py_compile OK; --fliplr default 0.0 (стартовая модель train14_ttseg_v3 -> train15_ttseg_v4); prelabel сохраняет полупрозрачные маски 6 классов и кольцо вокруг мяча в visualized/"
+    },
+    {
+      "id": "H-06",
+      "timestamp": "2026-11-08T21:24:00Z",
+      "agent": "validator",
+      "model": "grok-4.7-high-fast",
+      "subagent_id": "8eeebdf7-59e9-456b-af46-252e079e52c4",
+      "task": "Полный аудит моделей train10-14 и разметки датасетов + сравнение на 5 мастер-видео",
+      "changes": [
+        "results/model_and_labels_audit_20261108/audit_report.json",
+        "docs/MODEL_AND_LABELS_AUDIT.md"
+      ],
+      "facts": "Выявлены 238 осколков у сетки в 153/160 кадрах v3 и пропуск дальней половины стола на торцевом GX010138"
+    },
+    {
+      "id": "H-07",
+      "timestamp": "2026-11-08T21:48:00Z",
+      "agent": "coder",
+      "model": "grok-4.7-high-fast",
+      "subagent_id": "c48ded39-0c2f-4c7a-a266-6ed775ade6b9",
+      "task": "Шаг 1: Санация осколков стола в tt_seg_v3_cleaned и защита split_table_polygon",
+      "changes": [
+        "results/roboflow_pipeline/scripts/clean_ttseg_v3_shards.py",
+        "results/roboflow_pipeline/scripts/prelabel_yolo_seg.py"
+      ],
+      "facts": "153 чистых кадра сохранены в tt_seg_v3_cleaned (ровно 1 TableLeft и 1 TableRight на кадр), 7 неполных кадров вынесены в карантин"
+    },
+    {
+      "id": "H-08",
+      "timestamp": "2026-11-08T22:05:00Z",
+      "agent": "validator",
+      "model": "grok-4.7-high-fast",
+      "subagent_id": "a6021c13-c218-4d7c-a93b-47ce7b6c651d",
+      "task": "Шаги 2-3: Нарезка, предразметка и загрузка 176 кадров (5 батчей) в Roboflow tt-seg-img0291 + запуск SAM 3",
+      "changes": [
+        "results/roboflow_pipeline/runs/batch_IMG_1043_v4/state.json",
+        "results/roboflow_pipeline/runs/batch_IMG_0973_v4/state.json",
+        "results/roboflow_pipeline/runs/batch_GX010025_v4/state.json",
+        "results/roboflow_pipeline/runs/batch_GX010138_v4/state.json",
+        "results/roboflow_pipeline/runs/batch_quarantine_v3/state.json"
+      ],
+      "facts": "Залито 176 кадров (всего в tt-seg-img0291 теперь 336 кадров); SAM 3 job 918975b2-f280-4c75-bc4b-9d2e241d4630 запущен"
     }
   ],
   "decisions_log": [

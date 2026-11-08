@@ -1,0 +1,7 @@
+path: /home/misha/Рабочий стол/YOLOv8tabletennis/YOLOv8tabletennis-seg-main/results/roboflow_pipeline/runs/tt_seg_v3_cleaned/dataset
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 6
+names: ['Ball', 'Net', 'Player1', 'Player2', 'TableLeft', 'TableRight']
