@@ -1,0 +1,15 @@
++--------------------+------------+----+------+------+
+|               event|  event_type|hour|minute|second|
++--------------------+------------+----+------+------+
+|{19342, 987160,...|     message|  23|    57|    38|
+|{null, null, 2022...|subscription|  23|    56|    58|
+|{26358, 247511,...|     message|  23|    56|    53|
+|{77972, 748884,...|     message|  23|    56|    27|
+|{null, null, 2022...|subscription|  23|    53|    42|
+|{null, null, 2022...|subscription|  23|    53|    14|
+|{151897, 396845...|     message|  23|    52|    15|
+|{null, null, 2022...|subscription|  23|    52|     8|
+|{null, null, 2022...|subscription|  23|    51|    19|
+|{null, null, 2022...|subscription|  23|    51|    15|
++--------------------+------------+----+------+------+
+only showing top 10 rows

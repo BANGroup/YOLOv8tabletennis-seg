@@ -1,0 +1,32 @@
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=false
++- InMemoryTableScan [title#0]
+      +- InMemoryRelation [title#0], StorageLevel(disk, memory, deserialized, 1 replicas)
+            +- AdaptiveSparkPlan isFinalPlan=true
+               +- == Final Plan ==
+                  *(3) Project [title#0]
+                  +- *(3) BroadcastHashJoin [book_id#2L], [book_id#6L], LeftAnti, BuildRight, false
+                     :- ShuffleQueryStage 0
+                     :  +- Exchange hashpartitioning(book_id#2L, 200), ENSURE_REQUIREMENTS, [plan_id=53]
+                     :     +- *(1) Project [title#0, book_id#2L]
+                     :        +- *(1) Scan ExistingRDD[title#0,author#1,book_id#2L]
+                     +- BroadcastQueryStage 2
+                        +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=104]
+                           +- AQEShuffleRead local
+                              +- ShuffleQueryStage 1
+                                 +- Exchange hashpartitioning(book_id#6L, 200), ENSURE_REQUIREMENTS, [plan_id=67]
+                                    +- *(2) Project [book_id#6L]
+                                       +- *(2) Filter isnotnull(book_id#6L)
+                                          +- *(2) Scan ExistingRDD[book_id#6L,Library_id#7]
+               +- == Initial Plan ==
+                  Project [title#0]
+                  +- SortMergeJoin [book_id#2L], [book_id#6L], LeftAnti
+                     :- Sort [book_id#2L ASC NULLS FIRST], false, 0
+                     :  +- Exchange hashpartitioning(book_id#2L, 200), ENSURE_REQUIREMENTS, [plan_id=29]
+                     :     +- Project [title#0, book_id#2L]
+                     :        +- Scan ExistingRDD[title#0,author#1,book_id#2L]
+                     +- Sort [book_id#6L ASC NULLS FIRST], false, 0
+                        +- Exchange hashpartitioning(book_id#6L, 200), ENSURE_REQUIREMENTS, [plan_id=30]
+                           +- Project [book_id#6L]
+                              +- Filter isnotnull(book_id#6L)
+                                 +- Scan ExistingRDD[book_id#6L,Library_id#7]

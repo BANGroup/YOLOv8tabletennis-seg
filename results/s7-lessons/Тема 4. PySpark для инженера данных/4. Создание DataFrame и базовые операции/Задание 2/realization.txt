@@ -1,0 +1,15 @@
++------------------------------------------------------------------------------------------------------------------+------------+
+|event                                                                                                             |event_type  |
++------------------------------------------------------------------------------------------------------------------+------------+
+|{null, null, 2022-05-25 17:04:31, null, null, null, null, null, null, null, null, null, null, 913681, null, 48430}|subscription|
+|{null, null, 2022-05-25 15:20:12, null, null, null, null, null, null, null, null, null, null, 579406, null, 84256}|subscription|
+|{null, null, 2022-05-25 18:49:53, null, null, null, null, null, null, null, null, null, null, 84145, null, 48457} |subscription|
+|{null, null, 2022-05-25 00:15:15, null, null, null, null, null, null, null, null, null, null, 344598, null, 84308}|subscription|
+|{null, null, 2022-05-25 03:20:22, null, null, null, null, null, null, null, null, null, null, 596627, null, 48474}|subscription|
+|{null, null, 2022-05-25 04:54:08, null, null, null, null, null, null, null, null, null, null, 767711, null, 62234}|subscription|
+|{null, null, 2022-05-25 15:39:11, null, null, null, null, null, null, null, null, null, null, 657579, null, 69692}|subscription|
+|{null, null, 2022-05-25 01:12:32, null, null, null, null, null, null, null, null, null, null, 822105, null, 62257}|subscription|
+|{null, null, 2022-05-25 00:37:22, null, null, null, null, null, null, null, null, null, null, 88418, null, 69703} |subscription|
+|{null, null, 2022-05-25 07:25:22, null, null, null, null, null, null, null, null, null, null, 875433, null, 62259}|subscription|
++------------------------------------------------------------------------------------------------------------------+------------+
+only showing top 10 rows
