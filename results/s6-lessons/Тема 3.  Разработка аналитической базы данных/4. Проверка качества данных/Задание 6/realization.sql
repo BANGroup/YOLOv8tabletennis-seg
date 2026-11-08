@@ -1,0 +1,5 @@
+SELECT count(1)
+FROM VT2609246827BE__STAGING.groups g 
+LEFT JOIN VT2609246827BE__STAGING.users u 
+ON g.admin_id = u.id
+WHERE u.id is NULL;
